@@ -1,0 +1,56 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.balloon-field {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  cursor: text;
+}
+
+/* A real, invisible textarea over the whole scene: focus, typing, IME,
+   paste, the context menu and touch keyboards are all native. Where a mouse
+   click lands is mapped to the balloons in App.tsx.
+   16px keeps iOS from zooming on focus. */
+.balloon-input {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  font-size: 16px;
+  border: none;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  cursor: text;
+}
+
+.balloon-hint {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #aaa;
+  font-size: 14px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  pointer-events: none;
+  z-index: 1;
+}
