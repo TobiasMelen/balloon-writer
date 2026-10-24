@@ -1,5 +1,7 @@
 # balloon-writer
 
+![Balloon letters typed out and popped](docs/balloons.webp)
+
 Type, and your text appears as floating foil balloons: each letter is a
 physics-simulated balloon on a string that inflates as you type and pops when
 you delete it. Selection, the caret, copy/paste and the keyboard all work like
@@ -8,16 +10,26 @@ a normal text field.
 Built with React, React Three Fiber (three.js, WebGPU), Rapier physics and
 synthesised Web Audio sounds.
 
-## Running
+## Repository
+
+- `packages/balloon-writer/`: the npm package (`<BalloonArea>`,
+  `<BalloonInput>`). Its [README](packages/balloon-writer/README.md) covers
+  installing and using it.
+- `demo/`: the demo site, a Vite app that uses the package through its build
+  (`dist/`) like any other app would.
 
 ```bash
 bun install
-bun dev        # development server with hot reload
-bun run build  # production build into dist/
-bun start      # production server
+bun dev             # rebuilds the package on change, runs the demo with hot reload
+bun run build       # the package into packages/balloon-writer/dist/
+bun run build:demo  # the package, then the demo site into build/
+bun start           # serves the built demo site
 ```
 
-Open with `?sound` for a panel to tune the sounds.
+The demo is at `/`, more examples at `/examples.html`. Open it with `?sound`
+for a panel to tune the sounds.
+
+To publish: `cd packages/balloon-writer && npm publish`.
 
 ## Credits
 

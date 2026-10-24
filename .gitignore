@@ -36,3 +36,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Local editor and assistant settings
 .cursor
 .claude/settings.local.json
+
+# demo build
+build

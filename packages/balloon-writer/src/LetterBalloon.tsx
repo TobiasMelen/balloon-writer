@@ -75,7 +75,7 @@ const KNOT: [number, number, number] = [0, -BALLOON_HEIGHT / 3, 0];
 export const ANCHOR_DROP = ROPE_LENGTH - KNOT[1];
 
 /** Soft margin around letter colliders, so near-touching letters cushion. */
-const CONTACT_SKIN = 0.012;
+const CONTACT_SKIN = 0.025;
 
 /** Max random spawn rotation per axis, in radians. */
 const SPAWN_TILT = { x: 0.7, y: 1.2, z: 0.6 };
@@ -663,10 +663,10 @@ function balloonMaterial() {
 /** Compiles the balloon and string shaders in the background, so the first
  *  letter typed doesn't stall on building them. Call once the scene's environment map is set: it's part of
  *  the compiled shader. */
-export function compileShaders(renderer: { compileAsync: (o: THREE.Object3D, c: THREE.Camera, s: THREE.Scene) => Promise<void> }, camera: THREE.Camera, scene: THREE.Scene, glyph: Glyph) {
+export function compileShaders(renderer: { compileAsync: (o: THREE.Object3D, c: THREE.Camera, s: THREE.Scene) => Promise<void> }, camera: THREE.Camera, scene: THREE.Scene, glyph: Glyph, rope: RopeResources) {
   const balloon = new THREE.Mesh(glyph.geometry, balloonMaterial());
   balloon.userData = { balloon: { color: new THREE.Color(), emissive: new THREE.Color(), state: new THREE.Vector4(1, 0, 0, 0), puncture: new THREE.Vector4(), collapse: new THREE.Vector4(0, 0, 0, 0.1), size: new THREE.Vector2(1, 0) } satisfies BalloonLook };
-  const { geometry, material } = ropeResources();
+  const { geometry, material } = rope;
   const group = new THREE.Group().add(balloon, new THREE.Mesh(geometry, material));
   return renderer.compileAsync(group, camera, scene);
 }
@@ -955,11 +955,10 @@ const ROPE_COLOR = "#8a8a8a";
 /** Pieces each drawn string is made of, however few points are simulated. */
 const ROPE_DRAWN_SEGMENTS = 12;
 
-/** The ribbon strip and its material, built once and shared (like the
- *  balloon material) so they can be compiled ahead of the first letter. */
-let sharedRopeResources: ReturnType<typeof buildRopeResources> | null = null;
-const ropeResources = () => (sharedRopeResources ??= buildRopeResources());
-function buildRopeResources() {
+/** The ribbon strip, its material and its points texture: one set per
+ *  scene (a shared set would mix the strings of two BalloonAreas). */
+export type RopeResources = ReturnType<typeof buildRopeResources>;
+export function buildRopeResources() {
   // The strip: along = 0 at the knot to 1 at the bottom of the visible
   // part, side = which edge of the ribbon.
   const vertices = (ROPE_DRAWN_SEGMENTS + 1) * 2;
@@ -1018,11 +1017,19 @@ function buildRopeResources() {
  *  into a float texture (one row per string; its fade in the first texel's
  *  w, how many links to draw in the second's), and the vertex shader bends
  *  the strip along a curve through them. */
-export function RopeBatch() {
+export function RopeBatch({ resources }: { resources: RopeResources }) {
   const ropes = useContext(RopeContext);
   const meshRef = useRef<THREE.Mesh>(null);
   const capacity = useRef(0);
-  const { geometry, material, points } = ropeResources();
+  const { geometry, material, points } = resources;
+  useEffect(
+    () => () => {
+      geometry.dispose();
+      material.dispose();
+      points.value.dispose();
+    },
+    [geometry, material, points],
+  );
 
   useFrame(() => {
     const mesh = meshRef.current;

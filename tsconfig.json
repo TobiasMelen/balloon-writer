@@ -21,16 +21,11 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
 
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    },
-
     // Some stricter flags (disabled by default)
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
   },
 
-  "exclude": ["dist", "node_modules"]
+  "include": ["scripts"]
 }

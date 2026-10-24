@@ -1,3 +1,11 @@
+## This repo
+
+- `packages/balloon-writer/` is the npm package, built with Bun (`scripts/build.ts`).
+- `demo/` is the demo site. It is a Vite app on purpose: it uses the package's
+  build exactly as consumers do, and Bun's bundler doesn't resolve the
+  package's `new URL("./alphabet.glb", import.meta.url)` model. Keep it on
+  Vite; the Bun.serve / HTML-import guidance below doesn't apply to it.
+
 ---
 description: Use Bun instead of Node.js, npm, pnpm, or vite.
 globs: "*.ts, *.tsx, *.html, *.css, *.js, *.jsx, package.json"

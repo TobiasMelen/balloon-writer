@@ -1,0 +1,12 @@
+{
+  // Type declarations for the package (scripts/build-lib.ts).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src", "bun-env.d.ts"]
+}

@@ -1,4 +1,4 @@
-// Prototype page (/prototype): an Ä built from the original model's parts
+// Prototype page (prototype.html): an Ä built from the original model's parts
 // (its A, plus dots and necks cut from its I), next to the original A, in the
 // same colour and lit like the app, front-on and turned.
 import { useMemo } from "react";
@@ -6,7 +6,7 @@ import { createRoot } from "react-dom/client";
 import { Canvas } from "@react-three/fiber";
 import { Environment, Lightformer, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
-import umlautUrl from "./assets/prototype-umlaut.glb";
+import umlautUrl from "./assets/prototype-umlaut.glb?url";
 
 const CAP = 1.6;
 const material = new THREE.MeshPhysicalMaterial({ color: "#3a6fe0", metalness: 0.85, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.08 });

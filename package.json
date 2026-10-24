@@ -1,27 +1,19 @@
 {
-  "name": "balloon-writer",
-  "version": "0.1.0",
+  "name": "balloon-writer-repo",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "packages/*",
+    "demo"
+  ],
   "scripts": {
-    "dev": "bun --hot src/index.ts",
-    "build": "NODE_ENV=production bun build ./src/index.html --outdir=dist --splitting --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*'",
-    "start": "NODE_ENV=production bun src/index.ts"
-  },
-  "dependencies": {
-    "@react-three/drei": "^10.7.7",
-    "@react-three/fiber": "^9.6.1",
-    "@react-three/rapier": "^2.2.0",
-    "leva": "^0.10.1",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
-    "three": "^0.184.0"
+    "dev": "bun scripts/dev.ts",
+    "build": "bun run --cwd packages/balloon-writer build",
+    "build:demo": "bun run build && bun run --cwd demo build",
+    "start": "bun run --cwd demo preview"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@types/three": "^0.184.0",
     "typescript": "^6.0.3"
   }
 }

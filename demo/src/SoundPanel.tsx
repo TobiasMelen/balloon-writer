@@ -2,7 +2,7 @@
 // sliders write straight into `sound`, so the next sound played uses them;
 // "copy values" puts the current settings on the clipboard as JSON.
 import { Leva, button, folder, useControls } from "leva";
-import { playInflate, playPop, sound } from "./sound";
+import { playInflate, playPop, sound } from "balloon-writer/sound";
 
 type Range = { min: number; max: number; step: number };
 
