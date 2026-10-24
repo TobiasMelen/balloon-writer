@@ -2,6 +2,8 @@
 
 ![Balloon letters typed out and popped](docs/balloons.webp)
 
+**[Try it](https://tobiasmelen.github.io/balloon-writer/)**
+
 Type, and your text appears as floating foil balloons: each letter is a
 physics-simulated balloon on a string that inflates as you type and pops when
 you delete it. Selection, the caret, copy/paste and the keyboard all work like
