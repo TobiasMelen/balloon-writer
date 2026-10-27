@@ -1,6 +1,6 @@
 // The caret: a glowing capsule at the caret slot that blinks like a real
 // caret, and a slab in the physics that nudges balloons out of its way.
-import RAPIER from "@dimforge/rapier3d-compat";
+import RAPIER from "./rapier";
 import * as THREE from "three/webgpu";
 import { CARET_COLLISION, NO_COLLISION } from "./letters";
 

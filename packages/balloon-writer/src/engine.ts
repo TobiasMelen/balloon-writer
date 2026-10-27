@@ -14,7 +14,7 @@
 //
 // autoZoom shrinks the field's font until all the text fits instead of
 // scrolling; the balloons keep their physical size and the camera pulls back.
-import RAPIER from "@dimforge/rapier3d-compat";
+import RAPIER, { initRapier } from "./rapier";
 import * as THREE from "three/webgpu";
 import { createCaret } from "./caret";
 import { loadGlyphs } from "./glyphs";
@@ -63,7 +63,7 @@ const BASE_CSS = `
 /** Starts drawing `field`'s text as balloons, once the letters and the
  *  physics engine have loaded. */
 export async function start(field: TextField, options: () => BalloonOptions) {
-  const [{ glyphs, glyphHeight }] = await Promise.all([loadGlyphs(), RAPIER.init()]);
+  const [{ glyphs, glyphHeight }] = await Promise.all([loadGlyphs(), initRapier()]);
   if (!document.getElementById("balloon-area-css"))
     document.head.prepend(Object.assign(document.createElement("style"), { id: "balloon-area-css", textContent: BASE_CSS }));
   const soundOn = () => !SAD.has(options().sound ?? "");

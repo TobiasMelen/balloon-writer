@@ -12,7 +12,7 @@
 // - letters only collide within their own line, and only once they've
 //   reached their slot: a letter inserted mid-word rises into a gap that is
 //   slightly too tight, and would otherwise wedge under its neighbours
-import RAPIER from "@dimforge/rapier3d-compat";
+import RAPIER from "./rapier";
 import * as THREE from "three/webgpu";
 import { MeshBasicNodeMaterial, MeshPhysicalNodeMaterial, type Node, type NodeFrame } from "three/webgpu";
 import {

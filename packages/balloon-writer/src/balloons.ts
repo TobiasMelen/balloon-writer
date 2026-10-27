@@ -23,24 +23,34 @@ export type BalloonOptions = {
 export type Balloons = ReturnType<typeof createBalloons>;
 
 /** Draws `field`'s text as balloons. The text is hidden right away (the
- *  native caret stays until the balloons take over); they appear once loaded. */
+ *  native caret stays until the balloons take over); they appear once loaded.
+ *  If they can't load (offline, or a CSP that blocks WebAssembly), the field
+ *  goes back to plain text and `ready` rejects. */
 export function createBalloons(field: TextField, options: BalloonOptions = {}) {
   let current = { ...options };
   let engine: Awaited<ReturnType<typeof import("./engine").start>> | null = null;
   let destroyed = false;
   const restore = { className: field.className, style: field.getAttribute("style") };
-  registerMetricsFont();
+  const putBack = () => {
+    field.className = restore.className;
+    if (restore.style === null) field.removeAttribute("style");
+    else field.setAttribute("style", restore.style);
+  };
   // The caret keeps its colour (by default the text's, now transparent).
   const caretColor = getComputedStyle(field).caretColor;
   Object.assign(field.style, { fontFamily: `${METRICS_FONT}, system-ui, sans-serif`, color: "transparent", caretColor });
-  const ready = import("./engine")
-    .then(({ start }) => start(field, () => current))
+  const ready = Promise.all([import("./engine"), registerMetricsFont()])
+    .then(([{ start }]) => start(field, () => current))
     .then((started) => {
       if (destroyed) started.destroy();
       else engine = started;
+    })
+    .catch((error) => {
+      if (!destroyed) putBack();
+      throw error;
     });
   return {
-    /** Resolves once the balloons are showing. */
+    /** Resolves once the balloons are showing; rejects if they can't load. */
     ready,
     setOptions(next: BalloonOptions) {
       current = { ...current, ...next };
@@ -50,9 +60,7 @@ export function createBalloons(field: TextField, options: BalloonOptions = {}) {
     destroy() {
       destroyed = true;
       engine?.destroy();
-      field.className = restore.className;
-      if (restore.style === null) field.removeAttribute("style");
-      else field.setAttribute("style", restore.style);
+      putBack();
     },
   };
 }

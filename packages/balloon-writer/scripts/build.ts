@@ -25,9 +25,22 @@ async function build() {
     format: "esm",
     // One copy of the sound settings, shared by both entry points.
     splitting: true,
-    packages: "external",
+    // three and React are the app's own; Rapier is bundled in (below).
+    external: ["three", "three/*", "react", "react/*"],
     sourcemap: "linked",
     plugins: [
+      {
+        // Rapier's glue imports its .wasm as a module, which bundlers only do
+        // with extra setup. Drop that import: src/rapier.ts loads rapier.wasm
+        // (copied beside the code) and hands it to the glue itself.
+        name: "rapier-wasm",
+        setup(build) {
+          build.onLoad({ filter: /rapier_wasm3d\.js$/ }, async ({ path }) => {
+            await Bun.write("dist/rapier.wasm", Bun.file(path.replace(/\.js$/, "_bg.wasm")));
+            return { contents: `export * from "./rapier_wasm3d_bg.js";`, loader: "js" };
+          });
+        },
+      },
       {
         name: "glb-url",
         setup(build) {
