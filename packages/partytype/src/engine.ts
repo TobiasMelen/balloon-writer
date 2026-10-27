@@ -56,16 +56,16 @@ const OVERFLOW = 0.6;
  *  placeholder is real text in a real font. Nothing else: the field keeps
  *  the browser's (and the page's) own styles. */
 const BASE_CSS = `
-.balloon-area::selection { background: transparent; color: transparent; }
-.balloon-area::placeholder { color: #8e8e8e; font-family: system-ui, sans-serif; }
+.partytype::selection { background: transparent; color: transparent; }
+.partytype::placeholder { color: #8e8e8e; font-family: system-ui, sans-serif; }
 `;
 
 /** Starts drawing `field`'s text as balloons, once the letters and the
  *  physics engine have loaded. */
 export async function start(field: TextField, options: () => BalloonOptions) {
   const [{ glyphs, glyphHeight }] = await Promise.all([loadGlyphs(), initRapier()]);
-  if (!document.getElementById("balloon-area-css"))
-    document.head.prepend(Object.assign(document.createElement("style"), { id: "balloon-area-css", textContent: BASE_CSS }));
+  if (!document.getElementById("partytype-css"))
+    document.head.prepend(Object.assign(document.createElement("style"), { id: "partytype-css", textContent: BASE_CSS }));
   const soundOn = () => !SAD.has(options().sound ?? "");
   const multiline = field instanceof HTMLTextAreaElement;
 
@@ -115,7 +115,7 @@ export async function start(field: TextField, options: () => BalloonOptions) {
   const selection = createSelection(scene);
   // The balloons draw the caret and selection from now on (before reading
   // their colours: the native caret's, kept while loading, isn't the page's).
-  field.classList.add("balloon-area");
+  field.classList.add("partytype");
   field.style.caretColor = "transparent";
   const stopColors = watchSystemColors(field, ({ highlight, accent }) => {
     setSelectionGlow(highlight.color);

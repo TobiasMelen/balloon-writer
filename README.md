@@ -1,8 +1,8 @@
-# balloon-writer
+# partytype
 
 ![Balloon letters typed out and popped](docs/balloons.webp)
 
-**[Try it](https://tobiasmelen.github.io/balloon-writer/)**
+**[Try it](https://tobiasmelen.github.io/partytype/)**
 
 Type, and your text appears as floating foil balloons: each letter is a
 physics-simulated balloon on a string that inflates as you type and pops when
@@ -14,8 +14,8 @@ the core needs no framework, and there's a React adapter.
 
 ## Repository
 
-- `packages/balloon-writer/`: the npm package (`createBalloons` for any page,
-  `<BalloonArea>` and `<BalloonInput>` for React). Its [README](packages/balloon-writer/README.md) covers
+- `packages/partytype/`: the npm package (`createBalloons` for any page,
+  `<BalloonArea>` and `<BalloonInput>` for React). Its [README](packages/partytype/README.md) covers
   installing and using it.
 - `demo/`: the demo site, a Vite app that uses the package through its build
   (`dist/`) like any other app would.
@@ -23,7 +23,7 @@ the core needs no framework, and there's a React adapter.
 ```bash
 bun install
 bun dev             # rebuilds the package on change, runs the demo with hot reload
-bun run build       # the package into packages/balloon-writer/dist/
+bun run build       # the package into packages/partytype/dist/
 bun run build:demo  # the package, then the demo site into build/
 bun start           # serves the built demo site
 ```
@@ -31,7 +31,7 @@ bun start           # serves the built demo site
 The demo is at `/`, docs and examples at `/docs.html`, and a page with no framework at `/vanilla.html`. Open it with `?sound`
 for a panel to tune the sounds.
 
-To publish: `cd packages/balloon-writer && npm publish`.
+To publish: `cd packages/partytype && npm publish`.
 
 ## Credits
 

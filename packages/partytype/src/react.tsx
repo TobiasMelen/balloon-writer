@@ -1,4 +1,4 @@
-// balloon-writer/react: <BalloonArea> and <BalloonInput>, a drop-in
+// partytype/react: <BalloonArea> and <BalloonInput>, a drop-in
 // <textarea> and text <input> whose text floats as foil balloons. They render
 // the real field (className, style, ref and every other prop go to it) and
 // attach the balloons to it (see balloons.ts), which load on demand.
@@ -49,7 +49,7 @@ function Field({ tag, autoZoom, sound, containerClassName, containerStyle, ref, 
   useEffect(() => balloons.current?.setOptions({ autoZoom, sound }), [autoZoom, sound]);
   return (
     <div className={containerClassName} style={{ position: "relative", display: "inline-block", ...containerStyle }}>
-      {createElement(tag, { ref: setRef, spellCheck, ...props, className: props.className ? `balloon-area ${props.className}` : "balloon-area" })}
+      {createElement(tag, { ref: setRef, spellCheck, ...props, className: props.className ? `partytype ${props.className}` : "partytype" })}
     </div>
   );
 }

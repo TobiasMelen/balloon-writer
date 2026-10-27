@@ -1,5 +1,5 @@
 {
-  "name": "balloon-writer",
+  "name": "partytype",
   "version": "0.1.0",
   "description": "A <textarea> or <input> whose text floats as physics-simulated foil letter balloons. Vanilla core, React adapter.",
   "keywords": [

@@ -1,4 +1,4 @@
-# balloon-writer
+# partytype
 
 Type, and your text appears as floating foil balloons: each letter is a
 physics-simulated balloon on a string that inflates as you type and pops when
@@ -9,13 +9,13 @@ Built with three.js (WebGPU), Rapier physics and synthesised Web Audio sounds.
 No framework needed; a React adapter is included.
 
 ```bash
-npm install balloon-writer three
+npm install partytype three
 ```
 
 ## Any page
 
 ```js
-import { createBalloons } from "balloon-writer";
+import { createBalloons } from "partytype";
 
 const balloons = createBalloons(document.querySelector("textarea"), { autoZoom: true });
 // balloons.setOptions({ sound: "😢" }); balloons.destroy();
@@ -32,7 +32,7 @@ value is read every frame, so typing and changes from code both show.
 ## React
 
 ```tsx
-import { BalloonArea, BalloonInput } from "balloon-writer/react";
+import { BalloonArea, BalloonInput } from "partytype/react";
 
 <BalloonArea rows={3} placeholder="Type here" style={{ width: 600, fontSize: 48 }} />
 <BalloonInput autoZoom defaultValue="HELLO" style={{ width: 400 }} />
@@ -57,7 +57,7 @@ resolve on their own. Letters A–Z only for now; other characters leave a gap.
 
 ## Sound settings
 
-`balloon-writer/sound` exports the live sound settings (`sound`) and the
+`partytype/sound` exports the live sound settings (`sound`) and the
 sounds themselves (`playInflate`, `playPop`), for tuning them.
 
 ## Credits

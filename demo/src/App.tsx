@@ -1,7 +1,7 @@
 // The demo page: one full-screen <BalloonArea> that zooms to fit its text,
 // starting with a word in it, focused so you can carry on typing.
 import { Suspense, lazy, useState } from "react";
-import { BalloonArea } from "balloon-writer/react";
+import { BalloonArea } from "partytype/react";
 import "./index.css";
 
 /** ?sound shows the sound tuning panel, loaded only then (it brings leva). */

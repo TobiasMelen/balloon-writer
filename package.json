@@ -1,5 +1,5 @@
 {
-  "name": "balloon-writer-repo",
+  "name": "partytype-repo",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "dev": "bun scripts/dev.ts",
-    "build": "bun run --cwd packages/balloon-writer build",
+    "build": "bun run --cwd packages/partytype build",
     "build:demo": "bun run build && bun run --cwd demo build",
     "start": "bun run --cwd demo preview"
   },

@@ -2,7 +2,7 @@
 // Vite app using the package like any other app would) with hot reload.
 import { $ } from "bun";
 
-const pkg = "packages/balloon-writer";
+const pkg = "packages/partytype";
 await $`bun run --cwd ${pkg} build`;
 const lib = Bun.spawn(["bun", "run", "--cwd", pkg, "dev"], { stdio: ["inherit", "inherit", "inherit"] });
 const demo = Bun.spawn(["bun", "run", "--cwd", "demo", "dev"], { stdio: ["inherit", "inherit", "inherit"] });
