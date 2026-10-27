@@ -1,6 +1,6 @@
 // The demo page: one full-screen <BalloonArea> that zooms to fit its text,
 // starting with a word in it, focused so you can carry on typing.
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useState } from "react";
 import { BalloonArea } from "balloon-writer";
 import "./index.css";
 
@@ -16,8 +16,25 @@ function caretAtEnd(field: HTMLTextAreaElement | null) {
 }
 
 export function App() {
+  const [soundOn, setSoundOn] = useState(true);
   return (
     <>
+      <nav className="demo-corner">
+        <button
+          type="button"
+          className="demo-sound"
+          aria-label={soundOn ? "Turn sound off" : "Turn sound on"}
+          aria-pressed={!soundOn}
+          // Keep the text field focused, typing on.
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => setSoundOn((on) => !on)}
+        >
+          {soundOn ? "🧑‍🎤" : "😢"}
+        </button>
+        <a className="demo-docs" href="docs.html">
+          Docs &amp; examples
+        </a>
+      </nav>
       {SHOW_SOUND_PANEL && (
         <Suspense fallback={null}>
           <SoundPanel />
@@ -32,6 +49,7 @@ export function App() {
           wrap="off"
           autoFocus
           defaultValue={INITIAL}
+          sound={soundOn ? "🧑‍🎤" : "😢"}
           aria-label="Balloon text"
           autoCapitalize="characters"
           autoComplete="off"

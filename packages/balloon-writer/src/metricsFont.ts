@@ -13,6 +13,9 @@ export const METRICS_FONT = "BalloonMetrics";
 /** Line height (in em) that fits a row of balloons. */
 export const LINE_HEIGHT = 1.08;
 const EM = 1000;
+// OS/2 fsSelection bits.
+const REGULAR = 1 << 6;
+const USE_TYPO_METRICS = 1 << 7;
 /** Space between words, in em. */
 const SPACE = 0.8;
 
@@ -38,6 +41,12 @@ export function registerMetricsFont({ glyphs, glyphHeight }: Glyphs) {
       descender: -(LINE_HEIGHT / 2) * EM,
       glyphs: list,
     });
+    // The glyphs are blank, so the Windows metrics (derived from their
+    // outlines) would come out zero and browsers pick some other "normal"
+    // line height. Set them, and prefer the typo metrics, so line-height:
+    // normal is LINE_HEIGHT everywhere (give or take browsers rounding it).
+    // (Merged into the generated OS/2 table; the typings want a whole one.)
+    Object.assign(font.tables, { os2: { usWinAscent: (LINE_HEIGHT / 2) * EM, usWinDescent: (LINE_HEIGHT / 2) * EM, fsSelection: REGULAR | USE_TYPO_METRICS } });
     const face = new FontFace(METRICS_FONT, font.toArrayBuffer());
     document.fonts.add(await face.load());
   })());

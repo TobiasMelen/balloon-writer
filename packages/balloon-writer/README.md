@@ -30,6 +30,9 @@ real element and are styled the same way (`className`, `style`, borders,
 padding). Extra props:
 
 - `autoZoom`: shrink the text until it all fits, instead of scrolling.
+- `sound`: the balloons squeak as they inflate and bang as they pop. The only
+  way to turn that off is a sad emoji (`sound="😢"`; also 😭 😞 😔 🙁 ☹️). A
+  singing one (🧑‍🎤, the default, 🎤 🎶 🎵) turns it back on.
 - `containerClassName` / `containerStyle`: for the wrapper around the field
   and its canvas.
 

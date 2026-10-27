@@ -51,6 +51,27 @@ const COPIED = [
 ] as const;
 
 let mirror: HTMLDivElement | null = null;
+let probe: HTMLDivElement | null = null;
+
+/** What line-height: normal comes to for the field's font: two lines'
+ *  height, halved (browsers round the font's own metrics). */
+function normalLineHeight(style: CSSStyleDeclaration) {
+  probe ??= Object.assign(document.createElement("div"), { ariaHidden: "true", textContent: "A\nA" });
+  Object.assign(probe.style, {
+    position: "absolute",
+    visibility: "hidden",
+    left: "-99999px",
+    top: "0",
+    whiteSpace: "pre",
+    lineHeight: "normal",
+    fontFamily: style.fontFamily,
+    fontSize: style.fontSize,
+    fontWeight: style.fontWeight,
+    fontStyle: style.fontStyle,
+  });
+  if (!probe.isConnected) document.body.append(probe);
+  return probe.getBoundingClientRect().height / 2;
+}
 
 export function measureField(field: TextField): TextLayout {
   mirror ??= Object.assign(document.createElement("div"), { ariaHidden: "true" });
@@ -92,7 +113,7 @@ export function measureField(field: TextField): TextLayout {
   mirror.append(end);
 
   const origin = mirror.getBoundingClientRect();
-  const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2;
+  const lineHeight = parseFloat(style.lineHeight) || normalLineHeight(style);
   // An input centres its line in its content box.
   const contentHeight = field.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
   const shift = singleLine ? Math.max(0, (contentHeight - lineHeight) / 2) : 0;

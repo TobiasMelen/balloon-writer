@@ -175,6 +175,9 @@ export const LetterBalloon = memo(function LetterBalloon(props: LetterProps) {
   const bodyRef = useRef<RapierRigidBody>(null);
   const camera = useThree((s) => s.camera);
   const poses = useContext(LetterPoseContext);
+  // Read when a sound would play, so toggling doesn't re-run the effects.
+  const soundOn = useRef(true);
+  soundOn.current = useContext(SoundContext);
   // A popped (or removed) letter no longer has a pose to follow.
   useEffect(() => {
     if (props.dying) poses?.delete(props.id);
@@ -194,7 +197,7 @@ export const LetterBalloon = memo(function LetterBalloon(props: LetterProps) {
   // Auto-inflate on mount
   useEffect(() => {
     setInflated(true);
-    playInflate(panFor(props.x));
+    if (soundOn.current) playInflate(panFor(props.x));
   }, []);
 
   const { world } = useRapier();
@@ -311,7 +314,7 @@ export const LetterBalloon = memo(function LetterBalloon(props: LetterProps) {
     body.setGravityScale(props.dying ? 0 : traits.buoyancy, true);
     if (!props.dying) return;
     // The pop sounds as the collapse starts.
-    playPop(panFor(body.translation().x), pop.delay);
+    if (soundOn.current) playPop(panFor(body.translation().x), pop.delay);
     body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     // The rope lets go (like the drawn string), so nothing holds it back.
     const joint = ropeJoint.current;
@@ -848,6 +851,9 @@ export const RopeContext = createContext<RopeRegistry | null>(null);
  *  selection highlight to follow. */
 export type LetterPoses = Map<number, { x: number; y: number; slotX: number; slotY: number; roll: number }>;
 export const LetterPoseContext = createContext<LetterPoses | null>(null);
+
+/** Whether the letters make their inflate and pop sounds. */
+export const SoundContext = createContext(true);
 let nextRopeId = 0;
 
 /** Massless verlet string between anchor and knot. It never pulls on the

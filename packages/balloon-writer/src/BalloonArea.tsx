@@ -32,7 +32,7 @@ import * as THREE from "three";
 import { WebGPURenderer } from "three/webgpu";
 import { loadGlyphs, type Glyphs } from "./glyphs";
 import { measureField, type TextField, type TextLayout } from "./measure";
-import { LINE_HEIGHT, METRICS_FONT, registerMetricsFont } from "./metricsFont";
+import { METRICS_FONT, registerMetricsFont } from "./metricsFont";
 import {
   ANCHOR_DROP,
   CARET_COLLISION,
@@ -44,6 +44,7 @@ import {
   POP_LIFETIME,
   RopeBatch,
   RopeContext,
+  SoundContext,
   buildRopeResources,
   type RopeResources,
   type Glyph,
@@ -335,6 +336,7 @@ function BalloonScene({
   ghosts,
   selection,
   focused,
+  soundOn,
 }: {
   glyphs: Glyphs;
   layout: Layout;
@@ -345,6 +347,7 @@ function BalloonScene({
   ghosts: Ghost[];
   selection: [number, number];
   focused: boolean;
+  soundOn: boolean;
 }) {
   const ropes = useMemo<RopeRegistry>(() => new Map(), []);
   const poses = useMemo<LetterPoses>(() => new Map(), []);
@@ -369,7 +372,15 @@ function BalloonScene({
     z.speed += (ZOOM_STIFFNESS * (target - z.log) - 2 * Math.sqrt(ZOOM_STIFFNESS) * z.speed) * dt;
     z.log += z.speed * dt;
     const u = Math.exp(z.log);
-    const tan = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    // A wide, short box would need a very wide-angle view from close up:
+    // letters toward its ends turn to face the camera and pack together.
+    // Narrowing the view keeps them within MAX_HALF_WIDTH of straight ahead.
+    const fov = Math.min(FOV, 2 * THREE.MathUtils.radToDeg(Math.atan(Math.tan(MAX_HALF_WIDTH) / (v.width / v.height))));
+    if (Math.abs(camera.fov - fov) > 0.01) {
+      camera.fov = fov;
+      camera.updateProjectionMatrix();
+    }
+    const tan = Math.tan(THREE.MathUtils.degToRad(fov / 2));
     camera.position.set((v.left + v.width / 2) * u, -(v.top + v.height / 2) * u, ((v.height / 2) * u) / tan);
   });
 
@@ -419,35 +430,37 @@ function BalloonScene({
       {/* Softer contact correction (default 30): overlapping letters ease
           apart instead of being kicked out of each other, but still push
           each other firmly. */}
-      <LetterPoseContext.Provider value={poses}>
-        <RopeContext.Provider value={ropes}>
-          <Physics gravity={[0, -9.81, 0]} contactNaturalFrequency={8}>
-            {renderOrder.map((id) => {
-              const item = byId.get(id)!;
-              const glyph = glyphs.get(item.char.toUpperCase());
-              const p = positions.get(item.id);
-              if (!glyph || !p) return null;
-              const i = indexById.get(id) ?? -1;
-              const dying = i < 0;
-              return (
-                <LetterBalloon
-                  key={item.id}
-                  id={item.id}
-                  glyph={glyph}
-                  x={p.x}
-                  y={p.y}
-                  wordX={p.wordX}
-                  line={dying ? -1 : layout.caretLines[i]!}
-                  selected={!dying && i >= selStart && i < selEnd}
-                  dying={dying}
-                />
-              );
-            })}
-            <Caret x={caretSlot.x} y={caretSlot.y} height={glyphHeight} visible={focused && selStart === selEnd} color={system.accent.color} />
-          </Physics>
-          <RopeBatch resources={rope} />
-        </RopeContext.Provider>
-      </LetterPoseContext.Provider>
+      <SoundContext.Provider value={soundOn}>
+        <LetterPoseContext.Provider value={poses}>
+          <RopeContext.Provider value={ropes}>
+            <Physics gravity={[0, -9.81, 0]} contactNaturalFrequency={8}>
+              {renderOrder.map((id) => {
+                const item = byId.get(id)!;
+                const glyph = glyphs.get(item.char.toUpperCase());
+                const p = positions.get(item.id);
+                if (!glyph || !p) return null;
+                const i = indexById.get(id) ?? -1;
+                const dying = i < 0;
+                return (
+                  <LetterBalloon
+                    key={item.id}
+                    id={item.id}
+                    glyph={glyph}
+                    x={p.x}
+                    y={p.y}
+                    wordX={p.wordX}
+                    line={dying ? -1 : layout.caretLines[i]!}
+                    selected={!dying && i >= selStart && i < selEnd}
+                    dying={dying}
+                  />
+                );
+              })}
+              <Caret x={caretSlot.x} y={caretSlot.y} height={glyphHeight} visible={focused && selStart === selEnd} color={system.accent.color} />
+            </Physics>
+            <RopeBatch resources={rope} />
+          </RopeContext.Provider>
+        </LetterPoseContext.Provider>
+      </SoundContext.Provider>
       <SelectionHighlight layout={layout} items={items} start={selStart} end={selEnd} height={glyphHeight} poses={poses} color={system.highlight} />
       <ShaderWarmup glyph={glyphs.get("A")!} rope={rope} />
     </>
@@ -475,9 +488,17 @@ function Lighting() {
   );
 }
 
+/** Sound on. */
+export type SingingEmoji = "🧑‍🎤" | "🎤" | "🎶" | "🎵";
+/** Sound off: the only way to turn it off. */
+export type SadEmoji = "😢" | "😭" | "😞" | "😔" | "🙁" | "☹️";
+
 type BalloonOptions = {
   /** Shrink the text until it all fits, instead of scrolling. */
   autoZoom?: boolean;
+  /** The balloons squeak as they inflate and bang as they pop, unless this
+   *  is a sad emoji. Default 🧑‍🎤. */
+  sound?: SingingEmoji | SadEmoji;
   /** For the wrapper around the field and its canvas (sizing it, e.g.
    *  width: 100%, when the field fills it). */
   containerClassName?: string;
@@ -487,11 +508,10 @@ export type BalloonAreaProps = ComponentProps<"textarea"> & BalloonOptions;
 /** Text only: other input types have no text to draw. */
 export type BalloonInputProps = Omit<ComponentProps<"input">, "type"> & BalloonOptions;
 
-/** Default text styles, with no specificity to speak of so any className
- *  wins. The native selection is hidden (the balloons draw their own); the
- *  placeholder is real text in a real font. */
+/** The native selection is hidden (the balloons draw their own); the
+ *  placeholder is real text in a real font. Nothing else: the field keeps
+ *  the browser's (and the page's) own styles. */
 const BASE_CSS = `
-:where(.balloon-area) { font-size: 48px; line-height: ${LINE_HEIGHT}; }
 .balloon-area::selection { background: transparent; color: transparent; }
 .balloon-area::placeholder { color: #8e8e8e; font-family: system-ui, sans-serif; }
 `;
@@ -504,11 +524,23 @@ function injectCss() {
   document.head.prepend(style);
 }
 
+const SAD = new Set<string>(["😢", "😭", "😞", "😔", "🙁", "☹️"] satisfies SadEmoji[]);
+
+/** The camera's vertical field of view, degrees, narrowed for wide boxes so
+ *  no letter is more than MAX_HALF_WIDTH (radians) off straight ahead. */
+const FOV = 40;
+const MAX_HALF_WIDTH = THREE.MathUtils.degToRad(24);
+
 /** Zoom spring stiffness (1/s²): settles in about 0.6 s. */
 const ZOOM_STIFFNESS = 60;
 
-/** iOS zooms the page into inputs with text under 16px. */
+/** iOS zooms the page into inputs with text under 16px: autoZoom stops
+ *  there (or at the field's own size, if that's smaller). */
 const MIN_FONT_SIZE = 16;
+
+/** How far (in em of the field's own font) the balloons may drift out past
+ *  its padding box before they're cut off, fading out over the outer half. */
+const OVERFLOW = 0.6;
 
 /** A drop-in <textarea> whose text floats as foil balloons. */
 export function BalloonArea(props: BalloonAreaProps) {
@@ -525,6 +557,7 @@ type FieldProps = Omit<BalloonAreaProps, "ref"> & { ref?: Ref<TextField>; multil
 function BalloonField({
   multiline,
   autoZoom = false,
+  sound = "🧑‍🎤",
   containerClassName,
   containerStyle,
   className,
@@ -550,14 +583,17 @@ function BalloonField({
     [],
   );
 
+  const soundOn = !SAD.has(sound);
+
   // Set up the sounds while the page is idle, so the first letter typed
-  // doesn't stall on it (~0.1 s).
+  // doesn't stall on it (~0.1 s). Not at all while they're off.
   useEffect(() => {
+    if (!soundOn) return;
     const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 500));
     const cancel = window.cancelIdleCallback ?? window.clearTimeout;
     const id = idle(() => prepareAudio(), { timeout: 2000 });
     return () => cancel(id);
-  }, []);
+  }, [soundOn]);
 
   const textRef = useRef("");
   const itemsRef = useRef<Item[]>([]);
@@ -571,7 +607,9 @@ function BalloonField({
   const [zoomFont, setZoomFont] = useState<number | null>(null);
   const baseFont = useRef(48);
   // Box geometry for placing the canvas, and the scroll position.
-  const [box, setBox] = useState({ left: 0, top: 0, width: 0, height: 0 });
+  const [box, setBox] = useState({ left: 0, top: 0, width: 0, height: 0, margin: 0 });
+  // The canvas reaches this far (px) out past the padding box all round.
+  const margin = useRef(0);
   const view = useRef<View>({ left: 0, top: 0, width: 1, height: 1, scale: 1 });
   const scale = useRef(1);
   // The text's origin (the content box's top-left) in the padding box, px.
@@ -584,7 +622,8 @@ function BalloonField({
   const updateView = (t: TextField) => {
     const { x, y } = origin.current;
     const [scrollLeft, scrollTop] = followScroll.current ? [t.scrollLeft, t.scrollTop] : [0, 0];
-    view.current = { left: scrollLeft - x, top: scrollTop - y, width: t.clientWidth, height: t.clientHeight, scale: scale.current };
+    const m = margin.current;
+    view.current = { left: scrollLeft - x - m, top: scrollTop - y - m, width: t.clientWidth + 2 * m, height: t.clientHeight + 2 * m, scale: scale.current };
   };
 
   // Lay the text out where the textarea does; with autoZoom, shrink (or
@@ -598,9 +637,12 @@ function BalloonField({
     if (zoomFont === null) baseFont.current = fontSize;
     scale.current = glyphs.glyphHeight / fontSize; // world units per px
     origin.current = { x: parseFloat(css.paddingLeft), y: parseFloat(css.paddingTop) };
-    followScroll.current = !autoZoom || fontSize <= MIN_FONT_SIZE;
+    const minFont = Math.min(MIN_FONT_SIZE, baseFont.current);
+    followScroll.current = !autoZoom || fontSize <= minFont;
+    // From the field's own font, so it stays put while autoZoom zooms.
+    margin.current = Math.round(baseFont.current * OVERFLOW);
     setLayout(measured);
-    setBox({ left: t.offsetLeft + t.clientLeft, top: t.offsetTop + t.clientTop, width: t.clientWidth, height: t.clientHeight });
+    setBox({ left: t.offsetLeft + t.clientLeft, top: t.offsetTop + t.clientTop, width: t.clientWidth, height: t.clientHeight, margin: margin.current });
     updateView(t);
     if (autoZoom) {
       const availW = t.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight);
@@ -610,7 +652,7 @@ function BalloonField({
       const drop = (ANCHOR_DROP * 0.6) / scale.current;
       const fitH = multiline ? availH / Math.max(measured.height + drop, 1) : Infinity;
       const fit = Math.min(availW / Math.max(measured.width, 1), fitH);
-      const next = Math.max(MIN_FONT_SIZE, Math.min(baseFont.current, Math.floor(fontSize * fit * 2) / 2));
+      const next = Math.max(minFont, Math.min(baseFont.current, Math.floor(fontSize * fit * 2) / 2));
       if (Math.abs(next - fontSize) >= 0.5) setZoomFont(next === baseFont.current ? null : next);
     } else if (zoomFont !== null) setZoomFont(null);
   };
@@ -733,12 +775,29 @@ function BalloonField({
         },
       })}
       {field && world && box.width > 0 && (
-        <div style={{ position: "absolute", left: box.left, top: box.top, width: box.width, height: box.height, pointerEvents: "none", overflow: "hidden" }}>
+        <div
+          style={{
+            position: "absolute",
+            left: box.left - box.margin,
+            top: box.top - box.margin,
+            width: box.width + 2 * box.margin,
+            height: box.height + 2 * box.margin,
+            pointerEvents: "none",
+            overflow: "hidden",
+            // Solid over the field and the inner half of the margin, fading
+            // out over the outer half.
+            maskImage: [
+              `linear-gradient(to right, transparent, #000 ${box.margin / 2}px, #000 calc(100% - ${box.margin / 2}px), transparent)`,
+              `linear-gradient(to bottom, transparent, #000 ${box.margin / 2}px, #000 calc(100% - ${box.margin / 2}px), transparent)`,
+            ].join(", "),
+            maskComposite: "intersect",
+          }}
+        >
           <Canvas
             // Clicks, drags and taps go to the textarea underneath (R3F's
             // wrapper turns pointer events back on otherwise).
             style={{ pointerEvents: "none" }}
-            camera={{ position: [0, 0, 6], fov: 40, far: 1000 }}
+            camera={{ position: [0, 0, 6], fov: FOV, far: 1000 }}
             dpr={[1, 2]}
             flat
             // WebGPU, falling back to WebGL2 where it's unavailable.
@@ -765,6 +824,7 @@ function BalloonField({
                 ghosts={ghosts}
                 selection={selection}
                 focused={focused}
+                soundOn={soundOn}
               />
             </Suspense>
           </Canvas>

@@ -9,6 +9,6 @@ export default defineConfig({
   build: {
     outDir: "../build",
     emptyOutDir: true,
-    rollupOptions: { input: { index: "index.html", examples: "examples.html", prototype: "prototype.html" } },
+    rollupOptions: { input: { index: "index.html", docs: "docs.html", prototype: "prototype.html" } },
   },
 });

@@ -28,7 +28,7 @@ bun run build:demo  # the package, then the demo site into build/
 bun start           # serves the built demo site
 ```
 
-The demo is at `/`, more examples at `/examples.html`. Open it with `?sound`
+The demo is at `/`, docs and examples at `/docs.html`. Open it with `?sound`
 for a panel to tune the sounds.
 
 To publish: `cd packages/balloon-writer && npm publish`.
