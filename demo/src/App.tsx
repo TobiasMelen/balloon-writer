@@ -8,6 +8,9 @@ import "./index.css";
 const SHOW_SOUND_PANEL = new URLSearchParams(location.search).has("sound");
 const SoundPanel = lazy(() => import("./SoundPanel").then((m) => ({ default: m.SoundPanel })));
 
+/** ?webgl renders with WebGL instead of WebGPU, to tell browser WebGPU bugs apart. */
+const FORCE_WEBGL = new URLSearchParams(location.search).has("webgl");
+
 const INITIAL = "\nBalloons";
 
 /** The caret at the end of the text, ready to type on. */
@@ -45,6 +48,7 @@ export function App() {
         className="demo-area"
         containerClassName="demo-field"
         autoZoom
+        forceWebGL={FORCE_WEBGL}
         wrap="off"
         autoFocus
         defaultValue={INITIAL}

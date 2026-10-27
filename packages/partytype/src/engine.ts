@@ -74,7 +74,7 @@ export async function start(field: TextField, options: () => BalloonOptions) {
   const canvas = document.createElement("canvas");
   canvas.setAttribute("aria-hidden", "true");
   Object.assign(canvas.style, { position: "absolute", pointerEvents: "none" });
-  const renderer = new THREE.WebGPURenderer({ canvas, antialias: true, alpha: true });
+  const renderer = new THREE.WebGPURenderer({ canvas, antialias: true, alpha: true, forceWebGL: options().forceWebGL });
   await renderer.init();
   renderer.setClearColor(0x000000, 0);
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));

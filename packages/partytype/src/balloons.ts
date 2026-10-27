@@ -18,6 +18,8 @@ export type BalloonOptions = {
   /** The balloons squeak as they inflate and bang as they pop, unless this
    *  is a sad emoji. Default 🧑‍🎤. */
   sound?: SingingEmoji | SadEmoji;
+  /** Render with WebGL instead of WebGPU. Read once, when the balloons start. */
+  forceWebGL?: boolean;
 };
 
 export type Balloons = ReturnType<typeof createBalloons>;

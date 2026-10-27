@@ -26,7 +26,7 @@ export const BalloonInput = (props: BalloonInputProps) => <Field {...(props as F
 
 type FieldProps = Omit<BalloonAreaProps, "ref"> & { ref?: Ref<TextField>; tag: "textarea" | "input"; type?: string };
 
-function Field({ tag, autoZoom, sound, containerClassName, containerStyle, ref, spellCheck = false, ...props }: FieldProps) {
+function Field({ tag, autoZoom, sound, forceWebGL, containerClassName, containerStyle, ref, spellCheck = false, ...props }: FieldProps) {
   const [field, setField] = useState<TextField | null>(null);
   const balloons = useRef<Balloons | null>(null);
   // A stable ref callback that also hands the field to the caller's ref.
@@ -43,7 +43,7 @@ function Field({ tag, autoZoom, sound, containerClassName, containerStyle, ref, 
   );
   useLayoutEffect(() => {
     if (!field) return;
-    const b = (balloons.current = createBalloons(field, { autoZoom, sound }));
+    const b = (balloons.current = createBalloons(field, { autoZoom, sound, forceWebGL }));
     return () => b.destroy();
   }, [field]);
   useEffect(() => balloons.current?.setOptions({ autoZoom, sound }), [autoZoom, sound]);
