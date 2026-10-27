@@ -6,8 +6,7 @@
 //   (there's no caret keyword).
 // The browser resolves a colour when it's set on an element, so reading the
 // computed style gives the real value.
-import { useEffect, useState } from "react";
-import * as THREE from "three";
+import * as THREE from "three/webgpu";
 
 export type SystemColor = { color: THREE.Color; alpha: number };
 export type SystemColors = { highlight: SystemColor; accent: SystemColor };
@@ -33,12 +32,12 @@ function keyword(name: string): SystemColor {
   return color;
 }
 
-function read(input: HTMLElement | null): SystemColors {
-  const style = input && getComputedStyle(input);
-  const selection = input && parse(getComputedStyle(input, "::selection").backgroundColor);
+function read(input: HTMLElement): SystemColors {
+  const style = getComputedStyle(input);
+  const selection = parse(getComputedStyle(input, "::selection").backgroundColor);
   // An unset caret-color ("auto") reads back as the text colour.
-  const caret = style && style.caretColor !== style.color ? parse(style.caretColor) : null;
-  const accent = style && parse(style.accentColor);
+  const caret = style.caretColor !== style.color ? parse(style.caretColor) : null;
+  const accent = parse(style.accentColor);
   // Transparent counts as unset (e.g. a hidden input's native caret).
   const visible = (c: SystemColor | null) => (c && c.alpha > 0 ? c : null);
   return {
@@ -47,24 +46,21 @@ function read(input: HTMLElement | null): SystemColors {
   };
 }
 
-/** The caret and selection colours for `input`, read again when the window
- *  regains focus (OS settings may have changed), the colour scheme flips, or
- *  the page's styles change (e.g. a stylesheet hot-reloads). */
-export function useSystemColors(input: HTMLElement | null) {
-  const [colors, setColors] = useState(() => read(input));
-  useEffect(() => {
-    const update = () => setColors(read(input));
-    update();
-    const scheme = matchMedia("(prefers-color-scheme: dark)");
-    const styles = new MutationObserver(update);
-    styles.observe(document.head, { childList: true, subtree: true, characterData: true, attributes: true });
-    window.addEventListener("focus", update);
-    scheme.addEventListener("change", update);
-    return () => {
-      styles.disconnect();
-      window.removeEventListener("focus", update);
-      scheme.removeEventListener("change", update);
-    };
-  }, [input]);
-  return colors;
+/** Calls `onChange` with the caret and selection colours for `input` now,
+ *  and again when the window regains focus (OS settings may have changed),
+ *  the colour scheme flips, or the page's styles change (e.g. a stylesheet
+ *  hot-reloads). Returns a function that stops watching. */
+export function watchSystemColors(input: HTMLElement, onChange: (colors: SystemColors) => void) {
+  const update = () => onChange(read(input));
+  update();
+  const scheme = matchMedia("(prefers-color-scheme: dark)");
+  const styles = new MutationObserver(update);
+  styles.observe(document.head, { childList: true, subtree: true, characterData: true, attributes: true });
+  window.addEventListener("focus", update);
+  scheme.addEventListener("change", update);
+  return () => {
+    styles.disconnect();
+    window.removeEventListener("focus", update);
+    scheme.removeEventListener("change", update);
+  };
 }

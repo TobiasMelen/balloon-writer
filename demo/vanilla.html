@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>balloon-writer, no framework</title>
+  </head>
+  <body style="margin: 32px; font-family: system-ui">
+    <p>A plain textarea, no framework:</p>
+    <textarea rows="3" style="width: 600px; font-size: 40px; padding: 12px; border: 2px solid #c9ccd2; border-radius: 12px">PLAIN</textarea>
+    <script type="module">
+      import { createBalloons } from "balloon-writer";
+      window.balloons = createBalloons(document.querySelector("textarea"), { autoZoom: false });
+    </script>
+  </body>
+</html>

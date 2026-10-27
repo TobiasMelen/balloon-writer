@@ -12,10 +12,8 @@
 // - letters only collide within their own line, and only once they've
 //   reached their slot: a letter inserted mid-word rises into a gap that is
 //   slightly too tight, and would otherwise wedge under its neighbours
-import { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { useFrame, useThree } from "@react-three/fiber";
-import { CuboidCollider, RigidBody, interactionGroups, useRapier, useRopeJoint, type RapierRigidBody } from "@react-three/rapier";
-import * as THREE from "three";
+import RAPIER from "@dimforge/rapier3d-compat";
+import * as THREE from "three/webgpu";
 import { MeshBasicNodeMaterial, MeshPhysicalNodeMaterial, type Node, type NodeFrame } from "three/webgpu";
 import {
   Fn,
@@ -133,7 +131,10 @@ const TURN_BACK = 2.5;
 const yawInertia = (w: number, h: number, d: number) => w * h * d * (w * w + d * d);
 const yawInertiaRatio = (g: Glyph) => yawInertia(g.width, g.height, g.depth) / yawInertia(0.8, BALLOON_HEIGHT, 0.4);
 
-// Group 0 is the caret: every seated letter can be nudged by it.
+// Group 0 is the caret: every seated letter can be nudged by it. A collision
+// group is the groups a collider is in (high 16 bits) and those it hits.
+const bits = (groups: number[]) => groups.reduce((mask, g) => mask | (1 << g), 0);
+const interactionGroups = (members: number[], filter: number[]) => ((bits(members) << 16) | bits(filter)) >>> 0;
 export const CARET_COLLISION = interactionGroups([0], Array.from({ length: 16 }, (_, i) => i));
 export const NO_COLLISION = interactionGroups([], []);
 const lineCollision = (line: number) => interactionGroups([1 + (line % 15)], [0, 1 + (line % 15)]);
@@ -152,233 +153,249 @@ export type Glyph = {
   knot: THREE.Vector3;
 };
 
-type LetterProps = {
-  /** Stable id: the key the letter's live pose is published under. */
-  id: number;
-  glyph: Glyph;
-  /** Layout slot of the letter; the anchor follows it from below. */
-  x: number;
-  y: number;
-  /** Centre of the letter's word; its string gathers toward a point below it. */
-  wordX: number;
-  line: number;
-  /** Selected: a faint glow in the selection colour (the highlight itself is
-   *  drawn over the text, see SelectionHighlight in App). */
-  selected: boolean;
-  dying: boolean;
+/** Where a letter belongs: its layout slot (the anchor follows it from
+ *  below), its word's centre (its string gathers toward a point below it) and
+ *  its line (it only collides with letters on the same line). */
+export type Slot = { x: number; y: number; wordX: number; line: number };
+
+export type Letter = ReturnType<typeof createLetter>;
+
+/** A new letter at its slot: it starts just above its anchor with the rope
+ *  slack, folded up, and floats up as it inflates. */
+export function createLetter(world: RAPIER.World, scene: THREE.Scene, glyph: Glyph, slot: Slot, sound: boolean) {
+  const spawn = new THREE.Vector3(slot.x, slot.y - ANCHOR_DROP, 0);
+  const traits = randomTraits();
+  const pop = randomPop(glyph.geometry);
+  const anchor = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(spawn.x, spawn.y, 0));
+  const body = world.createRigidBody(
+    RAPIER.RigidBodyDesc.dynamic()
+      .setTranslation(spawn.x, spawn.y + ((SEGMENT_COUNT - 1) * SEGMENT_LENGTH + BALLOON_HEIGHT) * 0.6, 0)
+      .setRotation(new THREE.Quaternion().setFromEuler(new THREE.Euler(...randomTilt())))
+      .setGravityScale(traits.buoyancy)
+      .setLinearDamping(traits.linearDamping)
+      .setAngularDamping(traits.angularDamping),
+  );
+  // The collider stays full size while the mesh inflates: resizing it every
+  // frame keeps creating fresh overlaps for the solver to shove apart.
+  const collider = world.createCollider(
+    RAPIER.ColliderDesc.cuboid(glyph.width / 2, glyph.height / 2, glyph.depth / 2)
+      .setCollisionGroups(PASS_THROUGH)
+      .setContactSkin(CONTACT_SKIN)
+      .setDensity(traits.density)
+      .setRestitution(0.01),
+    body,
+  );
+  const rope = RAPIER.JointData.rope(ROPE_LENGTH, { x: 0, y: 0, z: 0 }, { x: KNOT[0], y: KNOT[1], z: KNOT[2] });
+  const look: BalloonLook = {
+    color: randomFoil(),
+    emissive: new THREE.Color(0, 0, 0),
+    state: new THREE.Vector4(0, 0, 0, 0),
+    puncture: new THREE.Vector4(pop.puncture.x, pop.puncture.y, pop.puncture.z, pop.seed),
+    collapse: new THREE.Vector4(pop.collapseTo.x, pop.collapseTo.y, pop.collapseTo.z, pop.scrap),
+    size: new THREE.Vector2(Math.max(glyph.width, glyph.height), 0),
+  };
+  const mesh = new THREE.Mesh(glyph.geometry, balloonMaterial());
+  mesh.userData.balloon = look;
+  mesh.scale.setScalar(0.0001);
+  scene.add(mesh);
+  if (sound) playInflate(panFor(slot.x));
+  return {
+    glyph,
+    slot,
+    /** Selected: a faint glow in the selection colour (the highlight itself
+     *  is drawn over the text, see selection.ts). */
+    selected: false,
+    /** Seconds since it popped; -1 while alive. */
+    dead: -1,
+    anchor,
+    body,
+    collider,
+    solid: false,
+    groups: PASS_THROUGH,
+    joint: world.createImpulseJoint(rope, anchor, body, true) as RAPIER.ImpulseJoint | null,
+    traits,
+    pop,
+    look,
+    mesh,
+    anchorAt: spawn.clone(),
+    anchorVelocity: new THREE.Vector3(),
+    /** The inflate spring (look.state.x follows it) and the scrap's scrunch. */
+    inflate: { x: 0, v: 0 },
+    scrunchVelocity: 0,
+    launched: false,
+    /** For the wobble: where the balloon was last frame, its velocity then,
+     *  and the wobble spring's own velocity. */
+    motion: { at: null as THREE.Vector3 | null, velocity: new THREE.Vector3(), wobbleVelocity: 0 },
+    /** Where it is now and its roll, for the selection highlight to follow. */
+    pose: { x: slot.x, y: slot.y, roll: 0 },
+    /** The drawn string's simulated points, from the anchor (0) to the knot
+     *  (last) as flat x, y, z triples, its fade and how many links to draw. */
+    rope: null as { pos: Float32Array; prev: Float32Array; fade: number; visibleLinks: number } | null,
+  };
+}
+
+/** Pops a letter: the pop sounds, the rope lets go (like the drawn string)
+ *  and air rushing out of the puncture kicks and spins it away. It hovers
+ *  while popping (falling made the letter jump away as it shrank). */
+export function popLetter(world: RAPIER.World, letter: Letter, sound: boolean) {
+  const { body, pop } = letter;
+  letter.dead = 0;
+  body.setGravityScale(0, true);
+  if (sound) playPop(panFor(body.translation().x), pop.delay);
+  body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+  if (letter.joint) world.removeImpulseJoint(letter.joint, true);
+  letter.joint = null;
+  letter.collider.setCollisionGroups(PASS_THROUGH);
+  const m = body.mass();
+  body.applyImpulse(_v.copy(pop.puncture).negate().normalize().applyQuaternion(rotationOf(body)).multiplyScalar(pop.kick * m), true);
+  body.applyTorqueImpulse(_v.copy(pop.spin).multiplyScalar(m * 0.05), true);
+  body.setLinearDamping(1); // so the escaping air actually carries it off
+}
+
+export function removeLetter(world: RAPIER.World, letter: Letter) {
+  letter.mesh.removeFromParent();
+  world.removeRigidBody(letter.body);
+  world.removeRigidBody(letter.anchor);
+}
+
+const rotationOf = (body: RAPIER.RigidBody) => {
+  const r = body.rotation();
+  return _q.set(r.x, r.y, r.z, r.w);
 };
 
-// memo: a letter only re-renders when its own props change (they're all
-// primitives or stable), not on every keystroke or caret move.
-export const LetterBalloon = memo(function LetterBalloon(props: LetterProps) {
-  const anchorRef = useRef<RapierRigidBody>(null);
-  const bodyRef = useRef<RapierRigidBody>(null);
-  const camera = useThree((s) => s.camera);
-  const poses = useContext(LetterPoseContext);
-  // Read when a sound would play, so toggling doesn't re-run the effects.
-  const soundOn = useRef(true);
-  soundOn.current = useContext(SoundContext);
-  // A popped (or removed) letter no longer has a pose to follow.
-  useEffect(() => {
-    if (props.dying) poses?.delete(props.id);
-    return () => void poses?.delete(props.id);
-  }, [poses, props.id, props.dying]);
-  const [spawn] = useState(() => new THREE.Vector3(props.x, props.y - ANCHOR_DROP, 0));
-  const [rotation] = useState(randomTilt);
-  const [traits] = useState(randomTraits);
-  const [color] = useState(randomFoil);
-  const [pop] = useState(() => randomPop(props.glyph.geometry));
-  const [inflated, setInflated] = useState(false);
-  const [solid, setSolid] = useState(false);
-  const anchor = useRef({ pos: spawn.clone(), vel: new THREE.Vector3() });
-  /** Seconds since popping, and whether the scrap has been shot off yet. */
-  const popped = useRef({ for: 0, launched: false });
+/** A letter's forces and animation for a frame, before the physics steps. */
+export function stepLetter(letter: Letter, camera: THREE.Camera, time: number, dt: number) {
+  const { body, slot, traits, pop, look } = letter;
+  const dying = letter.dead >= 0;
+  if (dying) letter.dead += dt;
 
-  // Auto-inflate on mount
-  useEffect(() => {
-    setInflated(true);
-    if (soundOn.current) playInflate(panFor(props.x));
-  }, []);
+  // Ease the anchor to the slot with a critically damped spring, so a
+  // reflow tows the letter along instead of yanking it.
+  const omega = 9;
+  letter.anchorVelocity
+    .addScaledVector(_v.set(slot.x, slot.y - ANCHOR_DROP, 0).sub(letter.anchorAt), omega * omega * dt)
+    .multiplyScalar(Math.max(0, 1 - 2 * omega * dt));
+  letter.anchorAt.addScaledVector(letter.anchorVelocity, dt);
+  letter.anchor.setNextKinematicTranslation(letter.anchorAt);
 
-  const { world } = useRapier();
-  const ropeJoint = useRopeJoint(anchorRef as React.RefObject<RapierRigidBody>, bodyRef as React.RefObject<RapierRigidBody>, [
-    [0, 0, 0],
-    KNOT,
-    ROPE_LENGTH,
-  ]);
-
-  useFrame(({ clock }, delta) => {
-    const dt = Math.min(delta, 1 / 30);
-
-    // Ease the anchor to the slot with a critically damped spring, so a
-    // reflow tows the letter along instead of yanking it.
-    const a = anchor.current;
-    const goal = _v.set(props.x, props.y - ANCHOR_DROP, 0);
-    const omega = 9;
-    a.vel.addScaledVector(goal.sub(a.pos), omega * omega * dt).multiplyScalar(Math.max(0, 1 - 2 * omega * dt));
-    a.pos.addScaledVector(a.vel, dt);
-    anchorRef.current?.setNextKinematicTranslation(a.pos);
-
-    const body = bodyRef.current;
-    if (!body) return;
-
-    const here = body.translation();
-    const away = Math.hypot(here.x - props.x, here.y - props.y);
-    if (!solid && away < SOLID_WITHIN) setSolid(true);
-    else if (solid && away > GHOST_BEYOND) setSolid(false);
-
-    // Popping: air keeps jetting out of the puncture while it collapses,
-    // pushing the balloon away from it, so it zips off a little. Once it has
-    // collapsed, the leftover scrap drops.
-    const r = body.rotation();
-    const rotation = _q.set(r.x, r.y, r.z, r.w);
-    // Publish where the letter is now, for the selection highlight.
-    if (poses && !props.dying) {
-      const pose = poses.get(props.id) ?? { x: 0, y: 0, slotX: 0, slotY: 0, roll: 0 };
-      pose.x = here.x;
-      pose.y = here.y;
-      pose.slotX = props.x;
-      pose.slotY = props.y;
-      // Roll in the text plane, from where the letter's up points. (Not
-      // 2·atan2(q.z, q.w): q and -q are the same rotation, and a balloon
-      // that had tumbled could sit upright reading as nearly a full turn.)
-      const up = _v2.set(0, 1, 0).applyQuaternion(rotation);
-      pose.roll = Math.atan2(-up.x, up.y);
-      poses.set(props.id, pose);
-    }
-    if (props.dying) {
-      const p = popped.current;
-      p.for += dt;
-      if (p.for < pop.delay + pop.duration) {
-        const away = _v.copy(pop.puncture).negate().normalize().applyQuaternion(rotation);
-        body.applyImpulse(away.multiplyScalar(pop.thrust * body.mass() * dt), true);
-      } else if (!p.launched) {
-        p.launched = true;
-        // It falls like the released string: from rest vertically (it kept
-        // the pop's motion, which threw scraps whose puncture was low
-        // upwards), drifting on a little sideways, under plain gravity with
-        // the string's air drag (4% of its speed a frame). No spin: the scrap
-        // sits off the body's centre, where it collapsed to, so spinning
-        // would swing it around in circles.
-        const v = body.linvel();
-        body.setLinvel({ x: v.x * 0.3, y: 0, z: v.z * 0.3 }, true);
-        body.setAngvel({ x: 0, y: 0, z: 0 }, true);
-        body.setGravityScale(1, true);
-        body.setLinearDamping(-Math.log(0.96) * 60);
-      }
-    }
+  const here = body.translation();
+  const rotation = rotationOf(body);
+  if (!dying) {
+    const away = Math.hypot(here.x - slot.x, here.y - slot.y);
+    letter.solid = away < SOLID_WITHIN || (letter.solid && away <= GHOST_BEYOND);
+    const groups = letter.solid ? lineCollision(slot.line) : PASS_THROUGH;
+    if (groups !== letter.groups) letter.collider.setCollisionGroups((letter.groups = groups));
+    // Where the letter is now, for the selection highlight. Roll in the text
+    // plane, from where the letter's up points. (Not 2·atan2(q.z, q.w): q and
+    // -q are the same rotation, and a balloon that had tumbled could sit
+    // upright reading as nearly a full turn.)
+    const up = _v2.set(0, 1, 0).applyQuaternion(rotation);
+    letter.pose = { x: here.x, y: here.y, roll: Math.atan2(-up.x, up.y) };
 
     // Gathered strings: pull each letter's knot toward its word's centre,
     // more the further out it sits. Pulling at the knot (below the centre of
-    // mass) gathers the bottoms and fans the tops out, like a bouquet.
-    if (!props.dying) {
-      const knot = _v.set(...KNOT).applyQuaternion(rotation).add(here);
-      // Push in the letter's own depth: a knot tilted in front of or behind
-      // the centre would turn a sideways push into a twist, spinning the
-      // outermost letters of each word edge-on.
-      knot.z = here.z;
-      body.applyImpulseAtPoint({ x: (props.wordX - props.x) * GATHER_PULL * body.mass() * dt, y: 0, z: 0 }, knot, true);
-    }
+    // mass) gathers the bottoms and fans the tops out, like a bouquet. Pushed
+    // in the letter's own depth: a knot tilted in front of or behind the
+    // centre would turn a sideways push into a twist, spinning the outermost
+    // letters of each word edge-on.
+    const knot = _v.set(...KNOT).applyQuaternion(rotation).add(here);
+    knot.z = here.z;
+    body.applyImpulseAtPoint({ x: (slot.wordX - slot.x) * GATHER_PULL * body.mass() * dt, y: 0, z: 0 }, knot, true);
 
     // Breeze: impulses scaled by mass, so every letter feels the same air
     // and its traits decide how it responds.
-    if (!props.dying) {
-      const gust = breeze(clock.elapsedTime, here.x, traits);
-      const m = body.mass();
-      body.applyImpulse({ x: gust.x * m * dt, y: 0, z: gust.z * m * dt }, true);
-      body.applyTorqueImpulse({ x: 0, y: 0, z: gust.roll * traits.density * yawInertiaRatio(props.glyph) }, true);
-    }
-
-    // Apply gentle torque to make balloon face camera
-    const targetYRot = Math.atan2(camera.position.x - here.x, camera.position.z - here.z);
-    // Yaw from the direction the letter faces, not from Euler angles: XYZ
-    // Euler yaw locks up at ±90°, so an edge-on letter got no (or the wrong)
-    // turn-back and could stay edge-on.
-    const facing = _v2.set(0, 0, 1).applyQuaternion(rotation);
-    let diff = targetYRot - Math.atan2(facing.x, facing.z);
-    while (diff > Math.PI) diff -= Math.PI * 2;
-    while (diff < -Math.PI) diff += Math.PI * 2;
-    // The rope balloons' 0.001 (times TURN_BACK), scaled by how much harder
-    // this letter is to spin than their 0.8 × 1.2 × 0.4 box.
-    const torqueStrength = 0.001 * TURN_BACK * yawInertiaRatio(props.glyph) * traits.density;
-    // Per second, not per frame (the rope balloons' value is per 60fps frame),
-    // so it turns back just as firmly at any frame rate.
-    body.applyTorqueImpulse({ x: 0, y: diff * torqueStrength * dt * 60, z: 0 }, true);
-  });
-
-  // Hover while popping (falling made the letter jump away as it shrank).
-  // Set on the body, not as a prop.
-  useEffect(() => {
-    const body = bodyRef.current;
-    if (!body) return;
-    body.setGravityScale(props.dying ? 0 : traits.buoyancy, true);
-    if (!props.dying) return;
-    // The pop sounds as the collapse starts.
-    if (soundOn.current) playPop(panFor(body.translation().x), pop.delay);
-    body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-    // The rope lets go (like the drawn string), so nothing holds it back.
-    const joint = ropeJoint.current;
-    if (joint && world.getImpulseJoint(joint.handle)) world.removeImpulseJoint(joint, true);
-    // Air rushing out of the puncture: a kick away from it and a spin.
-    const r = body.rotation();
-    const away = pop.puncture.clone().negate().normalize().applyQuaternion(new THREE.Quaternion(r.x, r.y, r.z, r.w));
+    const gust = breeze(time, here.x, traits);
     const m = body.mass();
-    body.applyImpulse(away.multiplyScalar(pop.kick * m), true);
-    body.applyTorqueImpulse(pop.spin.clone().multiplyScalar(m * 0.05), true);
-    body.setLinearDamping(1); // so the escaping air actually carries it off
-  }, [props.dying, traits.buoyancy, pop, ropeJoint, world]);
+    body.applyImpulse({ x: gust.x * m * dt, y: 0, z: gust.z * m * dt }, true);
+    body.applyTorqueImpulse({ x: 0, y: 0, z: gust.roll * traits.density * yawInertiaRatio(letter.glyph) }, true);
+  } else if (letter.dead < pop.delay + pop.duration) {
+    // Popping: air keeps jetting out of the puncture while it collapses,
+    // pushing the balloon away from it, so it zips off a little.
+    const away = _v.copy(pop.puncture).negate().normalize().applyQuaternion(rotation);
+    body.applyImpulse(away.multiplyScalar(pop.thrust * body.mass() * dt), true);
+  } else if (!letter.launched) {
+    // Once collapsed, the leftover scrap drops like the released string:
+    // from rest vertically (it kept the pop's motion, which threw scraps
+    // whose puncture was low upwards), drifting on a little sideways, under
+    // plain gravity with the string's air drag (4% of its speed a frame). No
+    // spin: the scrap sits off the body's centre, where it collapsed to, so
+    // spinning would swing it around in circles.
+    letter.launched = true;
+    const v = body.linvel();
+    body.setLinvel({ x: v.x * 0.3, y: 0, z: v.z * 0.3 }, true);
+    body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    body.setGravityScale(1, true);
+    body.setLinearDamping(-Math.log(0.96) * 60);
+  }
 
-  // Start just above the anchor with the rope slack, then float up.
-  const startHeightMultiplier = 0.6;
-  const start: [number, number, number] = [
-    spawn.x,
-    spawn.y + ((SEGMENT_COUNT - 1) * SEGMENT_LENGTH + BALLOON_HEIGHT) * startHeightMultiplier,
-    0,
-  ];
+  // Turn to face the camera, from the direction the letter faces (not Euler
+  // angles: XYZ Euler yaw locks up at ±90°, so an edge-on letter got no, or
+  // the wrong, turn-back and could stay edge-on). The rope balloons' 0.001
+  // (times TURN_BACK), scaled by how much harder this letter is to spin than
+  // their 0.8 × 1.2 × 0.4 box, per second rather than per 60fps frame.
+  const facing = _v2.set(0, 0, 1).applyQuaternion(rotation);
+  let diff = Math.atan2(camera.position.x - here.x, camera.position.z - here.z) - Math.atan2(facing.x, facing.z);
+  diff = THREE.MathUtils.euclideanModulo(diff + Math.PI, Math.PI * 2) - Math.PI;
+  const torqueStrength = 0.001 * TURN_BACK * yawInertiaRatio(letter.glyph) * traits.density;
+  body.applyTorqueImpulse({ x: 0, y: diff * torqueStrength * dt * 60, z: 0 }, true);
 
-  return (
-    <>
-      <RigidBody ref={anchorRef} type="kinematicPosition" colliders={false} position={spawn.toArray()} />
-      <RigidBody
-        // An object ref, not a callback: @react-three/rapier only calls a
-        // callback ref when the body is first created, so after a re-create
-        // (StrictMode mounts twice) it kept pointing at a removed body stuck at
-        // the spawn point, and popping snapped the letter to it.
-        ref={bodyRef}
-        position={start}
-        rotation={rotation}
-        colliders={false}
-        // These props must stay constant: when a RigidBody prop changes,
-        // @react-three/rapier re-syncs the body from its object, which put
-        // popping letters back at their spawn point. Gravity is switched on
-        // the body directly instead (see the effect above).
-        gravityScale={traits.buoyancy}
-        linearDamping={traits.linearDamping}
-        angularDamping={traits.angularDamping}
-        type="dynamic"
-      >
-        <LetterWithCollider
-          letter={props}
-          color={color}
-          inflated={inflated && !props.dying}
-          pop={pop}
-          deflating={props.dying}
-          solid={solid}
-          density={traits.density}
-        />
-      </RigidBody>
-      {SHOW_ROPES && (
-        <VisualRope
-          anchorRef={anchorRef}
-          bodyRef={bodyRef}
-          dying={props.dying}
-          gatherX={(props.wordX - props.x) * GATHER_STRINGS}
-          knot={props.glyph.knot}
-        />
-      )}
-    </>
-  );
-});
+  // Inflate is a spring (INFLATE_TENSION/FRICTION) the vertex shader makes
+  // wonky; the pop is a short delay, then the vertex shader collapses the
+  // balloon from its puncture to a point near it (pop.collapseTo).
+  if (dying) {
+    if (letter.dead >= pop.delay) {
+      look.state.y = Math.min((letter.dead - pop.delay) / pop.duration, 1); // deflate
+      // Once collapsed, the scrap falls, scrunching in, then at the end
+      // crumples away to nothing (in the shader; shrinking the whole mesh
+      // instead looked like it was going off into the distance).
+      const falling = (letter.dead - pop.delay - pop.duration) / SCRAP_LIFE;
+      if (falling > 0) {
+        const scrunch = look.state.z;
+        letter.scrunchVelocity += ((1 - scrunch) * SCRUNCH_TENSION - letter.scrunchVelocity * SCRUNCH_FRICTION) * dt;
+        look.state.z = Math.min(Math.max(scrunch + letter.scrunchVelocity * dt, 0), 1.4);
+      }
+      // Slow at first, then quickly gone.
+      if (falling > SCRAP_SOLID) look.state.w = Math.min((falling - SCRAP_SOLID) / (1 - SCRAP_SOLID), 1) ** 2; // vanish
+    }
+  } else {
+    const s = letter.inflate;
+    s.v += ((1 - s.x) * INFLATE_TENSION - s.v * INFLATE_FRICTION) * dt;
+    s.x += s.v * dt;
+    look.state.x = s.x; // inflate
+    wobble(letter, here, dt);
+  }
+  letter.mesh.scale.setScalar(Math.max(letter.inflate.x, 0.0001));
+  look.emissive.lerp(letter.selected && !dying ? SELECTED_GLOW : NO_GLOW, 1 - Math.exp(-dt * 12));
+}
+
+/** Jiggles the wobble from how sharply the balloon accelerates. */
+function wobble(letter: Letter, at: RAPIER.Vector, dt: number) {
+  const m = letter.motion;
+  const here = _wobbleAt.set(at.x, at.y, at.z);
+  if (!m.at) {
+    m.at = here.clone();
+    return;
+  }
+  const velocity = _wobbleVelocity.subVectors(here, m.at).divideScalar(dt);
+  m.at.copy(here);
+  // A jump (a new balloon placed at its spawn point) isn't motion.
+  if (velocity.lengthSq() > WOBBLE_TELEPORT ** 2) return void m.velocity.set(0, 0, 0);
+  const acceleration = Math.max(0, velocity.distanceTo(m.velocity) / dt - WOBBLE_DEAD_ZONE);
+  m.velocity.copy(velocity);
+  const look = letter.look;
+  const w = look.size.y;
+  m.wobbleVelocity += (-w * WOBBLE_TENSION - m.wobbleVelocity * WOBBLE_FRICTION + Math.min(acceleration, 60) * WOBBLE_DRIVE) * dt;
+  look.size.y = Math.max(-1, Math.min(1, w + m.wobbleVelocity * dt));
+}
+
+/** After the physics steps: the mesh to its body, and the drawn string. */
+export function placeLetter(letter: Letter, dt: number) {
+  const { body, mesh, glyph, slot } = letter;
+  const t = body.translation();
+  mesh.position.set(t.x, t.y, t.z);
+  mesh.quaternion.copy(rotationOf(body));
+  if (SHOW_ROPES) stepRope(letter, (slot.wordX - slot.x) * GATHER_STRINGS, glyph.knot, dt);
+}
 
 /** How a letter will pop, rolled when it's created so every pop differs. */
 type Pop = {
@@ -674,139 +691,6 @@ export function compileShaders(renderer: { compileAsync: (o: THREE.Object3D, c: 
   return renderer.compileAsync(group, camera, scene);
 }
 
-function LetterWithCollider({
-  letter,
-  color,
-  inflated,
-  deflating,
-  solid,
-  density,
-  pop,
-}: {
-  letter: LetterProps;
-  color: THREE.Color;
-  inflated: boolean;
-  deflating: boolean;
-  solid: boolean;
-  density: number;
-  pop: Pop;
-}) {
-  const { glyph } = letter;
-  const selected = useRef(letter.selected);
-  selected.current = letter.selected;
-  const look = useMemo<BalloonLook>(
-    () => ({
-      color,
-      emissive: new THREE.Color(0, 0, 0),
-      state: new THREE.Vector4(0, 0, 0, 0),
-      puncture: new THREE.Vector4(pop.puncture.x, pop.puncture.y, pop.puncture.z, pop.seed),
-      collapse: new THREE.Vector4(pop.collapseTo.x, pop.collapseTo.y, pop.collapseTo.z, pop.scrap),
-      size: new THREE.Vector2(Math.max(glyph.width, glyph.height), 0),
-    }),
-    [color, pop, glyph],
-  );
-  const userData = useMemo(() => ({ balloon: look }), [look]);
-
-  // Inflate and pop are stepped here rather than with react-spring: a
-  // declarative `to` sequence is rebuilt every render, so popping another
-  // letter replayed this one's deflate from the start. Inflate is a spring
-  // (INFLATE_TENSION/FRICTION) the vertex shader makes wonky; the pop is a
-  // short delay, then the vertex shader collapses the balloon from its
-  // puncture to a point near it (pop.collapseTo).
-  const meshRef = useRef<THREE.Mesh>(null);
-  const anim = useRef({ scale: 0, velocity: 0, deflateTime: -1, scrunchVelocity: 0 });
-  /** For the wobble: where the balloon was last frame, its velocity then,
-   *  and the wobble spring's own velocity. */
-  const motion = useRef({ at: null as THREE.Vector3 | null, velocity: new THREE.Vector3(), wobbleVelocity: 0 });
-  const state = useRef({ inflated, deflating });
-  state.current = { inflated, deflating };
-
-  useFrame((_, delta) => {
-    const mesh = meshRef.current;
-    const a = anim.current;
-    const { inflated, deflating } = state.current;
-    if (deflating) {
-      if (a.deflateTime < 0) a.deflateTime = 0;
-      a.deflateTime += delta;
-      if (a.deflateTime >= pop.delay) {
-        look.state.y = Math.min((a.deflateTime - pop.delay) / pop.duration, 1); // deflate
-        // Once collapsed, the scrap falls, scrunching in, then at
-        // the end crumples away to nothing (in the shader; shrinking the
-        // whole mesh instead looked like it was going off into the distance).
-        const falling = (a.deflateTime - pop.delay - pop.duration) / SCRAP_LIFE;
-        if (falling > 0) {
-          // Scrunching in (see SCRUNCH_TENSION).
-          const dt = Math.min(delta, 1 / 30);
-          const scrunch = look.state.z;
-          a.scrunchVelocity += ((1 - scrunch) * SCRUNCH_TENSION - a.scrunchVelocity * SCRUNCH_FRICTION) * dt;
-          look.state.z = Math.min(Math.max(scrunch + a.scrunchVelocity * dt, 0), 1.4);
-        }
-        if (falling > SCRAP_SOLID) {
-          // Slow at first, then quickly gone.
-          const out = Math.min((falling - SCRAP_SOLID) / (1 - SCRAP_SOLID), 1);
-          look.state.w = out * out; // vanish
-        }
-      }
-    } else {
-      const [target, tension, friction] = inflated ? [1, INFLATE_TENSION, INFLATE_FRICTION] : [0, 300, 10];
-      const dt = Math.min(delta, 1 / 30);
-      a.velocity += ((target - a.scale) * tension - a.velocity * friction) * dt;
-      a.scale += a.velocity * dt;
-      look.state.x = a.scale; // inflate
-      if (mesh) wobble(mesh, Math.min(delta, 1 / 30));
-    }
-    if (mesh) {
-      mesh.scale.setScalar(Math.max(a.scale, 0.0001));
-    }
-    look.emissive.lerp(selected.current ? SELECTED_GLOW : NO_GLOW, 1 - Math.exp(-delta * 12));
-  });
-
-  /** Jiggles the wobble from how sharply the balloon accelerates. */
-  function wobble(mesh: THREE.Mesh, dt: number) {
-    const m = motion.current;
-    const here = _wobbleAt.setFromMatrixPosition(mesh.matrixWorld);
-    if (!m.at || dt <= 0) {
-      m.at = here.clone();
-      return;
-    }
-    const velocity = _wobbleVelocity.subVectors(here, m.at).divideScalar(dt);
-    // A jump (a new balloon placed at its spawn point) isn't motion.
-    if (velocity.lengthSq() > WOBBLE_TELEPORT ** 2) {
-      m.at.copy(here);
-      m.velocity.set(0, 0, 0);
-      return;
-    }
-    const acceleration = Math.max(0, velocity.distanceTo(m.velocity) / dt - WOBBLE_DEAD_ZONE);
-    m.at.copy(here);
-    m.velocity.copy(velocity);
-    const w = look.size.y;
-    m.wobbleVelocity += (-w * WOBBLE_TENSION - m.wobbleVelocity * WOBBLE_FRICTION + Math.min(acceleration, 60) * WOBBLE_DRIVE) * dt;
-    look.size.y = Math.max(-1, Math.min(1, w + m.wobbleVelocity * dt));
-  }
-
-  // The collider stays full size while the mesh inflates: resizing it every
-  // frame keeps creating fresh overlaps for the solver to shove apart.
-  return (
-    <>
-      <CuboidCollider
-        args={[glyph.width / 2, glyph.height / 2, glyph.depth / 2]}
-        collisionGroups={solid && !deflating ? lineCollision(letter.line) : PASS_THROUGH}
-        contactSkin={CONTACT_SKIN}
-        density={density}
-        restitution={0.01}
-      />
-      <mesh
-        ref={meshRef}
-        scale={0.0001}
-        geometry={glyph.geometry}
-        material={balloonMaterial()}
-        userData={userData}
-        raycast={() => null}
-      />
-    </>
-  );
-}
-
 // Scratch objects reused every frame instead of allocating new ones.
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -843,117 +727,67 @@ const SCRAP_SOLID = 0.75;
  *  and fade. */
 export const POP_LIFETIME = Math.max(0.03 + 0.1 + SCRAP_LIFE, ROPE_RELEASE_AFTER + ROPE_FALL_FADE) + 0.05;
 
-/** Every string's simulated points, by rope id, drawn together by RopeBatch. */
-export type RopeRegistry = Map<number, { pos: Float32Array; fade: number; visibleLinks: number }>;
-export const RopeContext = createContext<RopeRegistry | null>(null);
+/** A letter's string: a massless verlet rope between anchor and knot. It
+ *  never pulls on the letter; the rope joint does that. It just sags when
+ *  slack and trails, and once the letter has popped it lets go and falls. */
+function stepRope(letter: Letter, gatherX: number, knot: THREE.Vector3, dt: number) {
+  const a = letter.anchor.translation();
+  const start = _ropeStart.set(a.x + gatherX, a.y, a.z);
+  // Rest length from where the anchor and this letter's knot sit at rest,
+  // so the string reaches without stretching.
+  const length = Math.hypot(gatherX - knot.x, ANCHOR_DROP + knot.y);
+  const rest = length / (ROPE_POINTS - 1);
+  const end = _ropeEnd.copy(knot).applyQuaternion(rotationOf(letter.body)).add(letter.mesh.position);
+  const lastPoint = (ROPE_POINTS - 1) * 3;
 
-/** Every live letter's position and roll (and its slot), by item id, for the
- *  selection highlight to follow. */
-export type LetterPoses = Map<number, { x: number; y: number; slotX: number; slotY: number; roll: number }>;
-export const LetterPoseContext = createContext<LetterPoses | null>(null);
+  if (!letter.rope) {
+    const pos = new Float32Array(ROPE_POINTS * 3);
+    for (let i = 0; i < ROPE_POINTS; i++) _v.lerpVectors(start, end, i / (ROPE_POINTS - 1)).toArray(pos, i * 3);
+    letter.rope = { pos, prev: pos.slice(), fade: 1, visibleLinks: 0 };
+  }
+  const rope = letter.rope;
+  const { pos, prev } = rope;
+  const released = letter.dead > ROPE_RELEASE_AFTER;
+  rope.fade = released ? Math.max(0, 1 - (letter.dead - ROPE_RELEASE_AFTER) / ROPE_FALL_FADE) : 1;
+  // Links to draw: a straight-down string's visible length, in this one's links.
+  rope.visibleLinks = (ROPE_VISIBLE_FRACTION * Math.hypot(knot.x, ANCHOR_DROP + knot.y)) / rest;
 
-/** Whether the letters make their inflate and pop sounds. */
-export const SoundContext = createContext(true);
-let nextRopeId = 0;
+  // Integrate with a little gravity and air drag; a released string falls
+  // properly and its loose top end comes down with it.
+  const fall = (released ? -9.81 : -3) * dt * dt;
+  const last = released ? ROPE_POINTS : ROPE_POINTS - 1;
+  for (let k = 3; k < last * 3; k++) {
+    const velocity = (pos[k]! - prev[k]!) * 0.96;
+    prev[k] = pos[k]!;
+    pos[k] = pos[k]! + velocity + (k % 3 === 1 ? fall : 0);
+  }
+  start.toArray(pos, 0);
+  if (!released) end.toArray(pos, lastPoint);
 
-/** Massless verlet string between anchor and knot. It never pulls on the
- *  letter; the rope joint does that. It just sags when slack and trails, and
- *  once the letter has popped it lets go and falls. Draws nothing itself:
- *  its points go into the RopeRegistry for RopeBatch. */
-function VisualRope({
-  anchorRef,
-  bodyRef,
-  dying,
-  gatherX,
-  knot,
-}: {
-  anchorRef: React.RefObject<RapierRigidBody | null>;
-  bodyRef: React.RefObject<RapierRigidBody | null>;
-  dying: boolean;
-  /** Sideways offset of the string's bottom, toward the word's centre. */
-  gatherX: number;
-  knot: THREE.Vector3;
-}) {
-  const ropes = useContext(RopeContext);
-  const [id] = useState(() => nextRopeId++);
-  /** Points as flat x, y, z triples, from the anchor (0) to the knot (last). */
-  const sim = useRef<{ pos: Float32Array; prev: Float32Array } | null>(null);
-  const deadFor = useRef(0);
-  useEffect(() => () => void ropes?.delete(id), [ropes, id]);
-
-  useFrame((_, delta) => {
-    const anchor = anchorRef.current;
-    const body = bodyRef.current;
-    if (!anchor || !body || !ropes) return;
-    const a = anchor.translation();
-    const t = body.translation();
-    const r = body.rotation();
-    const start = _ropeStart.set(a.x + gatherX, a.y, a.z);
-    // Rest length from where the anchor and this letter's knot sit at rest,
-    // so the string reaches without stretching.
-    const length = Math.hypot(gatherX - knot.x, ANCHOR_DROP + knot.y);
-    const rest = length / (ROPE_POINTS - 1);
-    // Links to draw: a straight-down string's visible length, in this one's links.
-    const visibleLinks = (ROPE_VISIBLE_FRACTION * Math.hypot(knot.x, ANCHOR_DROP + knot.y)) / rest;
-    const end = _ropeEnd.copy(knot).applyQuaternion(_q.set(r.x, r.y, r.z, r.w)).add(t);
-    const lastPoint = (ROPE_POINTS - 1) * 3;
-
-    if (!sim.current) {
-      const pos = new Float32Array(ROPE_POINTS * 3);
-      for (let i = 0; i < ROPE_POINTS; i++) _v.lerpVectors(start, end, i / (ROPE_POINTS - 1)).toArray(pos, i * 3);
-      sim.current = { pos, prev: pos.slice() };
+  // Rope constraint: links may go slack but never stretch.
+  for (let pass = 0; pass < ROPE_PASSES; pass++) {
+    for (let p = 0; p < lastPoint; p += 3) {
+      const q = p + 3;
+      const dx = pos[q]! - pos[p]!;
+      const dy = pos[q + 1]! - pos[p + 1]!;
+      const dz = pos[q + 2]! - pos[p + 2]!;
+      const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (len <= rest) continue;
+      const pinnedP = p === 0;
+      const pinnedQ = q === lastPoint && !released;
+      if (pinnedP && pinnedQ) continue;
+      // Share of the overshoot each end takes back.
+      const k = (len - rest) / len;
+      const kp = pinnedP ? 0 : pinnedQ ? k : k / 2;
+      const kq = pinnedQ ? 0 : k - kp;
+      pos[p] = pos[p]! + dx * kp;
+      pos[p + 1] = pos[p + 1]! + dy * kp;
+      pos[p + 2] = pos[p + 2]! + dz * kp;
+      pos[q] = pos[q]! - dx * kq;
+      pos[q + 1] = pos[q + 1]! - dy * kq;
+      pos[q + 2] = pos[q + 2]! - dz * kq;
     }
-    const { pos, prev } = sim.current;
-    const dt = Math.min(delta, 1 / 30);
-    if (dying) deadFor.current += dt;
-    const released = deadFor.current > ROPE_RELEASE_AFTER;
-    const fade = released ? Math.max(0, 1 - (deadFor.current - ROPE_RELEASE_AFTER) / ROPE_FALL_FADE) : 1;
-
-    // Integrate with a little gravity and air drag; a released string falls
-    // properly and its loose top end comes down with it.
-    const fall = (released ? -9.81 : -3) * dt * dt;
-    const last = released ? ROPE_POINTS : ROPE_POINTS - 1;
-    for (let k = 3; k < last * 3; k++) {
-      const velocity = (pos[k]! - prev[k]!) * 0.96;
-      prev[k] = pos[k]!;
-      pos[k] = pos[k]! + velocity + (k % 3 === 1 ? fall : 0);
-    }
-    start.toArray(pos, 0);
-    if (!released) end.toArray(pos, lastPoint);
-
-    // Rope constraint: links may go slack but never stretch
-    for (let pass = 0; pass < ROPE_PASSES; pass++) {
-      for (let p = 0; p < lastPoint; p += 3) {
-        const q = p + 3;
-        const dx = pos[q]! - pos[p]!;
-        const dy = pos[q + 1]! - pos[p + 1]!;
-        const dz = pos[q + 2]! - pos[p + 2]!;
-        const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (len <= rest) continue;
-        const pinnedP = p === 0;
-        const pinnedQ = q === lastPoint && !released;
-        if (pinnedP && pinnedQ) continue;
-        // Share of the overshoot each end takes back.
-        const k = (len - rest) / len;
-        const kp = pinnedP ? 0 : pinnedQ ? k : k / 2;
-        const kq = pinnedQ ? 0 : k - kp;
-        pos[p] = pos[p]! + dx * kp;
-        pos[p + 1] = pos[p + 1]! + dy * kp;
-        pos[p + 2] = pos[p + 2]! + dz * kp;
-        pos[q] = pos[q]! - dx * kq;
-        pos[q + 1] = pos[q + 1]! - dy * kq;
-        pos[q + 2] = pos[q + 2]! - dz * kq;
-      }
-    }
-
-    const entry = ropes.get(id);
-    if (entry) {
-      entry.fade = fade;
-      entry.visibleLinks = visibleLinks;
-    } else ropes.set(id, { pos, fade, visibleLinks });
-  });
-
-  return null;
+  }
 }
 
 const ROPE_HALF_WIDTH = 0.006;
@@ -1023,51 +857,50 @@ export function buildRopeResources() {
  *  into a float texture (one row per string; its fade in the first texel's
  *  w, how many links to draw in the second's), and the vertex shader bends
  *  the strip along a curve through them. */
-export function RopeBatch({ resources }: { resources: RopeResources }) {
-  const ropes = useContext(RopeContext);
-  const meshRef = useRef<THREE.Mesh>(null);
-  const capacity = useRef(0);
+export function createRopes() {
+  const resources = buildRopeResources();
   const { geometry, material, points } = resources;
-  useEffect(
-    () => () => {
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.frustumCulled = false;
+  mesh.visible = false;
+  let capacity = 0;
+  return {
+    mesh,
+    resources,
+    update(letters: Iterable<Letter>) {
+      let r = 0;
+      for (const { rope } of letters) {
+        if (!rope) continue;
+        // Grow the texture (doubling) when there are more strings than rows.
+        if (r >= capacity) {
+          capacity = Math.max(32, capacity * 2);
+          const grown = ropeTexture(capacity);
+          (grown.image.data as Float32Array).set((points.value as THREE.DataTexture).image.data as Float32Array);
+          points.value.dispose();
+          points.value = grown;
+        }
+        const data = (points.value as THREE.DataTexture).image.data as Float32Array;
+        const row = r * ROPE_POINTS * 4;
+        for (let i = 0; i < ROPE_POINTS; i++) {
+          data[row + i * 4] = rope.pos[i * 3]!;
+          data[row + i * 4 + 1] = rope.pos[i * 3 + 1]!;
+          data[row + i * 4 + 2] = rope.pos[i * 3 + 2]!;
+        }
+        data[row + 3] = rope.fade;
+        data[row + 7] = rope.visibleLinks;
+        r++;
+      }
+      points.value.needsUpdate = true;
+      geometry.instanceCount = r;
+      mesh.visible = r > 0;
+    },
+    dispose() {
       geometry.dispose();
       material.dispose();
       points.value.dispose();
     },
-    [geometry, material, points],
-  );
-
-  useFrame(() => {
-    const mesh = meshRef.current;
-    if (!mesh || !ropes) return;
-    // Grow the texture (doubling) when there are more strings than rows.
-    if (ropes.size > capacity.current) {
-      const n = Math.max(32, capacity.current * 2, ropes.size);
-      points.value.dispose();
-      points.value = ropeTexture(n);
-      capacity.current = n;
-    }
-    const data = (points.value as THREE.DataTexture).image.data as Float32Array;
-    let r = 0;
-    for (const { pos, fade, visibleLinks } of ropes.values()) {
-      const row = r * ROPE_POINTS * 4;
-      for (let i = 0; i < ROPE_POINTS; i++) {
-        data[row + i * 4] = pos[i * 3]!;
-        data[row + i * 4 + 1] = pos[i * 3 + 1]!;
-        data[row + i * 4 + 2] = pos[i * 3 + 2]!;
-      }
-      data[row + 3] = fade;
-      data[row + 7] = visibleLinks;
-      r++;
-    }
-    points.value.needsUpdate = true;
-    geometry.instanceCount = r;
-    mesh.visible = r > 0;
-  });
-
-  return <mesh ref={meshRef} geometry={geometry} material={material} visible={false} frustumCulled={false} raycast={() => null} />;
+  };
 }
-
 /** Float texture holding `rows` strings' points (x, y, z, and fade in w). */
 function ropeTexture(rows: number) {
   const tex = new THREE.DataTexture(new Float32Array(ROPE_POINTS * rows * 4), ROPE_POINTS, rows, THREE.RGBAFormat, THREE.FloatType);

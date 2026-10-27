@@ -2,11 +2,11 @@
 // BALLOON_HEIGHT, centred) and widths. Loaded outside any canvas, so the
 // metrics font (metricsFont.ts) can be built from the widths before the text
 // is laid out.
-import * as THREE from "three";
+import * as THREE from "three/webgpu";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import alphabetUrl from "./assets/alphabet.glb";
-import { BALLOON_HEIGHT, type Glyph } from "./LetterBalloon";
+import { BALLOON_HEIGHT, type Glyph } from "./letters";
 
 /** Overlap between neighbours as a share of a letter's width: letters are
  *  packed tighter than their colliders, so they squeeze and jostle. */

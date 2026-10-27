@@ -9,13 +9,13 @@ physics-simulated balloon on a string that inflates as you type and pops when
 you delete it. Selection, the caret, copy/paste and the keyboard all work like
 a normal text field.
 
-Built with React, React Three Fiber (three.js, WebGPU), Rapier physics and
-synthesised Web Audio sounds.
+Built with three.js (WebGPU), Rapier physics and synthesised Web Audio sounds;
+the core needs no framework, and there's a React adapter.
 
 ## Repository
 
-- `packages/balloon-writer/`: the npm package (`<BalloonArea>`,
-  `<BalloonInput>`). Its [README](packages/balloon-writer/README.md) covers
+- `packages/balloon-writer/`: the npm package (`createBalloons` for any page,
+  `<BalloonArea>` and `<BalloonInput>` for React). Its [README](packages/balloon-writer/README.md) covers
   installing and using it.
 - `demo/`: the demo site, a Vite app that uses the package through its build
   (`dist/`) like any other app would.
@@ -28,7 +28,7 @@ bun run build:demo  # the package, then the demo site into build/
 bun start           # serves the built demo site
 ```
 
-The demo is at `/`, docs and examples at `/docs.html`. Open it with `?sound`
+The demo is at `/`, docs and examples at `/docs.html`, and a page with no framework at `/vanilla.html`. Open it with `?sound`
 for a panel to tune the sounds.
 
 To publish: `cd packages/balloon-writer && npm publish`.

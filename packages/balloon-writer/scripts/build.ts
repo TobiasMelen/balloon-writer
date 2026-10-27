@@ -18,7 +18,7 @@ async function build() {
   // Not while watching: the demo would see the package vanish mid-rebuild.
   if (!watching) await $`rm -rf dist`;
   const result = await Bun.build({
-    entrypoints: ["src/index.ts", "src/soundTuning.ts"],
+    entrypoints: ["src/index.ts", "src/react.tsx", "src/soundTuning.ts"],
     outdir: "dist",
     target: "browser",
     format: "esm",

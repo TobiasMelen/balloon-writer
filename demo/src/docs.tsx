@@ -1,7 +1,7 @@
 // docs.html: how to use the package, each part with a live example.
 import { Suspense, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { BalloonArea, BalloonInput } from "balloon-writer";
+import { BalloonArea, BalloonInput } from "balloon-writer/react";
 import "./docs.css";
 
 const box = { boxSizing: "border-box", border: "2px solid #c9ccd2", borderRadius: 12, padding: 12, background: "#fafbfc", width: "100%", fontSize: 40 } as const;
@@ -49,15 +49,15 @@ function Docs() {
         balloons. Typing, selection, copy/paste and the keyboard work like a normal field.
       </p>
 
-      <Section title="Install" code="npm install balloon-writer three @react-three/fiber @react-three/drei @react-three/rapier">
-        <p>Needs React 19. three and the React Three packages are peer dependencies.</p>
+      <Section title="Install" code="npm install balloon-writer three">
+        <p>three is a peer dependency. The React components need React 19.</p>
       </Section>
 
       <Section
         title="BalloonArea"
         code={`
 import { Suspense } from "react";
-import { BalloonArea } from "balloon-writer";
+import { BalloonArea } from "balloon-writer/react";
 
 <Suspense fallback={null}>
   <BalloonArea rows={3} defaultValue="HELLO" style={{ fontSize: 40, padding: 12 }} />

@@ -1,7 +1,7 @@
 {
   "name": "balloon-writer",
   "version": "0.1.0",
-  "description": "Drop-in React <textarea> and <input> whose text floats as physics-simulated foil letter balloons.",
+  "description": "A <textarea> or <input> whose text floats as physics-simulated foil letter balloons. Vanilla core, React adapter.",
   "keywords": [
     "react",
     "textarea",
@@ -21,6 +21,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.js"
+    },
     "./sound": {
       "types": "./dist/soundTuning.d.ts",
       "import": "./dist/soundTuning.js"
@@ -37,27 +41,24 @@
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.19.2",
     "opentype.js": "1.3.4"
   },
   "peerDependencies": {
-    "@react-three/drei": "^10.7.7",
-    "@react-three/fiber": "^9.6.1",
-    "@react-three/rapier": "^2.2.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
     "three": "^0.184.0"
   },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
   "devDependencies": {
-    "@react-three/drei": "^10.7.7",
-    "@react-three/fiber": "^9.6.1",
-    "@react-three/rapier": "^2.2.0",
     "@types/bun": "latest",
     "@types/opentype.js": "^1.3.10",
     "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
     "@types/three": "^0.184.0",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5",
     "three": "^0.184.0",
     "typescript": "^6.0.3"
   }

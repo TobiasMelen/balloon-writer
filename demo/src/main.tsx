@@ -5,15 +5,16 @@
  * It is included in `index.html`.
  */
 
+import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 
 const elem = document.getElementById("root")!;
-// No StrictMode: its dev-only mount/unmount/remount left @react-three/rapier
-// with a second, stale rigid body per balloon, frozen at the spawn point. Our
-// forces went to one body and the scene showed the other, and popping a
-// letter snapped it back to its spawn point.
-const app = <App />;
+const app = (
+  <StrictMode>
+    <App />
+  </StrictMode>
+);
 
 if (import.meta.hot) {
   // With hot module reloading, `import.meta.hot.data` is persisted.

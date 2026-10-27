@@ -10,7 +10,6 @@
   "dependencies": {
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
-    "@react-three/rapier": "^2.2.0",
     "balloon-writer": "workspace:*",
     "leva": "^0.10.1",
     "react": "^19.0.0",

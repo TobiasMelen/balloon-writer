@@ -5,10 +5,10 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   // One copy of each, shared with the package (its peer dependencies).
-  resolve: { dedupe: ["react", "react-dom", "three", "@react-three/fiber", "@react-three/drei", "@react-three/rapier"] },
+  resolve: { dedupe: ["react", "react-dom", "three"] },
   build: {
     outDir: "../build",
     emptyOutDir: true,
-    rollupOptions: { input: { index: "index.html", docs: "docs.html", prototype: "prototype.html" } },
+    rollupOptions: { input: { index: "index.html", docs: "docs.html", vanilla: "vanilla.html", prototype: "prototype.html" } },
   },
 });

@@ -5,18 +5,32 @@ physics-simulated balloon on a string that inflates as you type and pops when
 you delete it. Selection, the caret, copy/paste and the keyboard all work like
 a normal text field.
 
-Built with React, React Three Fiber (three.js, WebGPU), Rapier physics and
-synthesised Web Audio sounds.
-
-## Using it in your app
+Built with three.js (WebGPU), Rapier physics and synthesised Web Audio sounds.
+No framework needed; a React adapter is included.
 
 ```bash
-npm install balloon-writer three @react-three/fiber @react-three/drei @react-three/rapier
+npm install balloon-writer three
 ```
+
+## Any page
+
+```js
+import { createBalloons } from "balloon-writer";
+
+const balloons = createBalloons(document.querySelector("textarea"), { autoZoom: true });
+// balloons.setOptions({ sound: "😢" }); balloons.destroy();
+```
+
+Attach it to any `<textarea>` or text `<input>`. The field stays the real,
+visible, styled element (borders, padding, scrolling, selection, focus all
+work as usual); the balloons draw over it on a canvas placed next to it. Its
+value is read every frame, so typing and changes from code both show.
+
+## React
 
 ```tsx
 import { Suspense } from "react";
-import { BalloonArea, BalloonInput } from "balloon-writer";
+import { BalloonArea, BalloonInput } from "balloon-writer/react";
 
 <Suspense fallback={null}>
   <BalloonArea rows={3} placeholder="Type here" style={{ width: 600, fontSize: 48 }} />
@@ -26,21 +40,21 @@ import { BalloonArea, BalloonInput } from "balloon-writer";
 
 `<BalloonArea>` is a drop-in `<textarea>` and `<BalloonInput>` a drop-in text
 `<input>`: they take the same props (controlled or not), forward `ref` to the
-real element and are styled the same way (`className`, `style`, borders,
-padding). Extra props:
+real element and are styled the same way. They suspend while the balloons
+load, so render them inside `<Suspense>`. Requires React 19.
+`containerClassName` / `containerStyle` style the wrapper around the field and
+its canvas.
+
+## Options
 
 - `autoZoom`: shrink the text until it all fits, instead of scrolling.
 - `sound`: the balloons squeak as they inflate and bang as they pop. The only
-  way to turn that off is a sad emoji (`sound="😢"`; also 😭 😞 😔 🙁 ☹️). A
+  way to turn that off is a sad emoji (`sound: "😢"`; also 😭 😞 😔 🙁 ☹️). A
   singing one (🧑‍🎤, the default, 🎤 🎶 🎵) turns it back on.
-- `containerClassName` / `containerStyle`: for the wrapper around the field
-  and its canvas.
 
-They suspend while the balloon model loads, so render them inside
-`<Suspense>`. Requires React 19. The model (`alphabet.glb`, ~470 kB) ships
-beside the code and is found with `new URL(..., import.meta.url)`, which Vite,
-webpack 5, Rollup, Parcel and Next resolve on their own. Letters A–Z only for
-now; other characters leave a gap.
+The model (`alphabet.glb`, ~470 kB) ships beside the code and is found with
+`new URL(..., import.meta.url)`, which Vite, webpack 5, Rollup, Parcel and Next
+resolve on their own. Letters A–Z only for now; other characters leave a gap.
 
 ## Sound settings
 
