@@ -17,6 +17,7 @@ const watching = process.argv.includes("--watch");
 async function build() {
   // Not while watching: the demo would see the package vanish mid-rebuild.
   if (!watching) await $`rm -rf dist`;
+  await $`bun scripts/font.ts`;
   const result = await Bun.build({
     entrypoints: ["src/index.ts", "src/react.tsx", "src/soundTuning.ts"],
     outdir: "dist",

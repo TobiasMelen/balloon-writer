@@ -40,22 +40,20 @@ export function App() {
           <SoundPanel />
         </Suspense>
       )}
-      <Suspense fallback={null}>
-        <BalloonArea
-          ref={caretAtEnd}
-          className="demo-area"
-          containerClassName="demo-field"
-          autoZoom
-          wrap="off"
-          autoFocus
-          defaultValue={INITIAL}
-          sound={soundOn ? "🧑‍🎤" : "😢"}
-          aria-label="Balloon text"
-          autoCapitalize="characters"
-          autoComplete="off"
-          autoCorrect="off"
-        />
-      </Suspense>
+      <BalloonArea
+        ref={caretAtEnd}
+        className="demo-area"
+        containerClassName="demo-field"
+        autoZoom
+        wrap="off"
+        autoFocus
+        defaultValue={INITIAL}
+        sound={soundOn ? "🧑‍🎤" : "😢"}
+        aria-label="Balloon text"
+        autoCapitalize="characters"
+        autoComplete="off"
+        autoCorrect="off"
+      />
     </>
   );
 }

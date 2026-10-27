@@ -1,10 +1,9 @@
 // balloon-writer/react: <BalloonArea> and <BalloonInput>, a drop-in
 // <textarea> and text <input> whose text floats as foil balloons. They render
 // the real field (className, style, ref and every other prop go to it) and
-// attach the balloons to it (see balloons.ts). They suspend until the
-// balloons have loaded, so render them inside <Suspense>.
-import { createElement, use, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ComponentProps, type Ref } from "react";
-import { createBalloons, loadBalloons, type BalloonOptions, type Balloons } from "./balloons";
+// attach the balloons to it (see balloons.ts), which load on demand.
+import { createElement, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ComponentProps, type Ref } from "react";
+import { createBalloons, type BalloonOptions, type Balloons } from "./balloons";
 import type { TextField } from "./measure";
 
 export type { SadEmoji, SingingEmoji } from "./balloons";
@@ -28,7 +27,6 @@ export const BalloonInput = (props: BalloonInputProps) => <Field {...(props as F
 type FieldProps = Omit<BalloonAreaProps, "ref"> & { ref?: Ref<TextField>; tag: "textarea" | "input"; type?: string };
 
 function Field({ tag, autoZoom, sound, containerClassName, containerStyle, ref, spellCheck = false, ...props }: FieldProps) {
-  use(loadBalloons());
   const [field, setField] = useState<TextField | null>(null);
   const balloons = useRef<Balloons | null>(null);
   // A stable ref callback that also hands the field to the caller's ref.

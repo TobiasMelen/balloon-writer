@@ -48,12 +48,12 @@ import {
   vec4,
 } from "three/tsl";
 
-/** The rope-balloon demo's sizes, which its physics tuning was made for: the
- *  balloon's height (letters are scaled to it) and its rope's segments. */
-export const BALLOON_HEIGHT = 1.2;
+import { BALLOON_HEIGHT } from "./glyphs";
+import { panFor, playInflate, playPop } from "./sound";
+
+/** The rope-balloon demo's rope segments, which its physics tuning was made for. */
 const SEGMENT_COUNT = 4;
 const SEGMENT_LENGTH = 0.2;
-import { panFor, playInflate, playPop } from "./sound";
 
 /** How far each drawn string's bottom slides toward its word's centre
  *  (0 = straight down, 1 = all strings meet at one point). */

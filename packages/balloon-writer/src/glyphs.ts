@@ -1,16 +1,15 @@
 // The balloon letters, loaded once and shared: their meshes (scaled to
-// BALLOON_HEIGHT, centred) and widths. Loaded outside any canvas, so the
-// metrics font (metricsFont.ts) can be built from the widths before the text
-// is laid out.
+// BALLOON_HEIGHT, centred) and sizes. The build bakes their widths into the
+// metrics font (scripts/font.ts) from the same model.
 import * as THREE from "three/webgpu";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import alphabetUrl from "./assets/alphabet.glb";
-import { BALLOON_HEIGHT, type Glyph } from "./letters";
+import type { Glyph } from "./letters";
 
-/** Overlap between neighbours as a share of a letter's width: letters are
- *  packed tighter than their colliders, so they squeeze and jostle. */
-export const TRACKING = -0.03;
+/** The rope-balloon demo's balloon height, which its physics tuning was made
+ *  for: letters are scaled to it. */
+export const BALLOON_HEIGHT = 1.2;
 
 export type Glyphs = {
   /** By uppercase letter. */
@@ -49,9 +48,10 @@ function lowestPoint(geometry: THREE.BufferGeometry) {
   return new THREE.Vector3(0, geometry.boundingBox?.min.y ?? 0, 0);
 }
 
-async function load(): Promise<Glyphs> {
-  const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-  const { scene } = await loader.loadAsync(alphabetUrl);
+export const glyphLoader = () => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+
+/** The letters from the model's scene. */
+export function bakeGlyphs(scene: THREE.Object3D): Glyphs {
   scene.updateMatrixWorld(true);
   const glyphs = new Map<string, Glyph>();
   // Size letters like the original rope balloons so their physics tuning
@@ -77,4 +77,4 @@ async function load(): Promise<Glyphs> {
 
 let loading: Promise<Glyphs> | null = null;
 /** The balloon letters, loading them on first call. */
-export const loadGlyphs = () => (loading ??= load());
+export const loadGlyphs = () => (loading ??= glyphLoader().loadAsync(alphabetUrl).then((gltf) => bakeGlyphs(gltf.scene)));

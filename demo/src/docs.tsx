@@ -1,5 +1,5 @@
 // docs.html: how to use the package, each part with a live example.
-import { Suspense, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { BalloonArea, BalloonInput } from "balloon-writer/react";
 import "./docs.css";
@@ -56,18 +56,15 @@ function Docs() {
       <Section
         title="BalloonArea"
         code={`
-import { Suspense } from "react";
 import { BalloonArea } from "balloon-writer/react";
 
-<Suspense fallback={null}>
-  <BalloonArea rows={3} defaultValue="HELLO" style={{ fontSize: 40, padding: 12 }} />
-</Suspense>`}
+<BalloonArea rows={3} defaultValue="HELLO" style={{ fontSize: 40, padding: 12 }} />`}
         demo={<BalloonArea rows={3} defaultValue="HELLO" containerStyle={wide} style={box} />}
       >
         <p>
           A <code>&lt;textarea&gt;</code>: it takes the same props, wraps and scrolls the same way, and is styled with{" "}
-          <code>className</code> and <code>style</code> like one. It suspends while the balloons load, so render it inside{" "}
-          <code>&lt;Suspense&gt;</code>.
+          <code>className</code> and <code>style</code> like one. Its text is hidden at once; the balloons load in the
+          background and appear when ready.
         </p>
       </Section>
 
@@ -154,8 +151,4 @@ const ref = useRef<HTMLTextAreaElement>(null);
   );
 }
 
-createRoot(document.getElementById("root")!).render(
-  <Suspense fallback={null}>
-    <Docs />
-  </Suspense>,
-);
+createRoot(document.getElementById("root")!).render(<Docs />);

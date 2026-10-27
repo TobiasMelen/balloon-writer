@@ -21,7 +21,10 @@ const balloons = createBalloons(document.querySelector("textarea"), { autoZoom: 
 // balloons.setOptions({ sound: "😢" }); balloons.destroy();
 ```
 
-Attach it to any `<textarea>` or text `<input>`. The field stays the real,
+Attach it to any `<textarea>` or text `<input>`. Its text is hidden at once
+(this part is a few KB, including the font that lays it out); three.js, the
+physics and the model load in the background, and the balloons appear when
+they're ready (`balloons.ready`). The field stays the real,
 visible, styled element (borders, padding, scrolling, selection, focus all
 work as usual); the balloons draw over it on a canvas placed next to it. Its
 value is read every frame, so typing and changes from code both show.
@@ -29,19 +32,15 @@ value is read every frame, so typing and changes from code both show.
 ## React
 
 ```tsx
-import { Suspense } from "react";
 import { BalloonArea, BalloonInput } from "balloon-writer/react";
 
-<Suspense fallback={null}>
-  <BalloonArea rows={3} placeholder="Type here" style={{ width: 600, fontSize: 48 }} />
-  <BalloonInput autoZoom defaultValue="HELLO" style={{ width: 400 }} />
-</Suspense>
+<BalloonArea rows={3} placeholder="Type here" style={{ width: 600, fontSize: 48 }} />
+<BalloonInput autoZoom defaultValue="HELLO" style={{ width: 400 }} />
 ```
 
 `<BalloonArea>` is a drop-in `<textarea>` and `<BalloonInput>` a drop-in text
 `<input>`: they take the same props (controlled or not), forward `ref` to the
-real element and are styled the same way. They suspend while the balloons
-load, so render them inside `<Suspense>`. Requires React 19.
+real element and are styled the same way. Requires React 19.
 `containerClassName` / `containerStyle` style the wrapper around the field and
 its canvas.
 
